@@ -134,7 +134,9 @@ class ConnectionRepository(BaseRepository):
     def get_employee_report(
         self,
         employee_id: int,
-        days: Optional[int] = None
+        days: Optional[int] = None,
+        start_date: Optional[datetime] = None,
+        end_date: Optional[datetime] = None
     ) -> tuple[List[Dict], Dict]:
         """Получить отчет по сотруднику за период"""
         try:
@@ -144,7 +146,14 @@ class ConnectionRepository(BaseRepository):
             # Формируем условие по дате
             date_condition = ""
             params = [employee_id]
-            if days is not None:
+            if start_date and end_date:
+                date_condition = "AND c.created_at BETWEEN ? AND ?"
+                params.append(start_date.strftime("%Y-%m-%d %H:%M:%S"))
+                params.append(end_date.strftime("%Y-%m-%d %H:%M:%S"))
+            elif start_date:
+                date_condition = "AND c.created_at >= ?"
+                params.append(start_date.strftime("%Y-%m-%d %H:%M:%S"))
+            elif days is not None:
                 date_limit = datetime.now() - timedelta(days=days)
                 date_condition = "AND c.created_at >= ?"
                 params.append(date_limit.strftime("%Y-%m-%d %H:%M:%S"))
@@ -225,4 +234,3 @@ class ConnectionRepository(BaseRepository):
         except Exception as e:
             logger.error(f"Ошибка при подсчете подключений: {e}")
             return 0
-

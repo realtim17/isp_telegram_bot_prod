@@ -68,7 +68,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 Метраж делится поровну между всеми исполнителями.
 Например: 100м ВОЛС на 2 исполнителей = по 50м каждому
 
-❓ Если возникли вопросы - обратитесь к администратору.
+❓ Если возникли вопросы - обратитесь к администратору @tim_real
 """
     await update.message.reply_text(help_text, parse_mode='HTML')
 

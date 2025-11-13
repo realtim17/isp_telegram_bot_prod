@@ -22,6 +22,7 @@ from config import (
     SELECT_EMPLOYEE_FOR_ROUTER, SELECT_ROUTER_ACTION,
     ENTER_ROUTER_NAME, ENTER_ROUTER_QUANTITY, CONFIRM_ROUTER_OPERATION,
     SELECT_REPORT_EMPLOYEE, SELECT_REPORT_PERIOD,
+    ENTER_REPORT_CUSTOM_START, ENTER_REPORT_CUSTOM_END,
     logger
 )
 
@@ -46,7 +47,9 @@ from handlers.connection import connection_conv
 from handlers.reports import (
     report_start,
     report_select_period,
-    report_generate
+    report_generate,
+    report_enter_custom_start,
+    report_enter_custom_end
 )
 
 # Импорт обработчиков сотрудников
@@ -99,6 +102,9 @@ def main():
     async def report_generate_wrapper(update, context):
         return await report_generate(update, context, db)
     
+    async def report_custom_end_wrapper(update, context):
+        return await report_enter_custom_end(update, context, db)
+    
     async def manage_action_wrapper(update, context):
         return await manage_action(update, context, db)
     
@@ -140,7 +146,9 @@ def main():
         ],
         states={
             SELECT_REPORT_EMPLOYEE: [CallbackQueryHandler(report_select_period_wrapper, pattern='^(rep_emp_|report_cancel)')],
-            SELECT_REPORT_PERIOD: [CallbackQueryHandler(report_generate_wrapper, pattern='^(period_|period_cancel)')]
+            SELECT_REPORT_PERIOD: [CallbackQueryHandler(report_generate_wrapper, pattern='^(period_|period_cancel)')],
+            ENTER_REPORT_CUSTOM_START: [MessageHandler(text_input_filter, report_enter_custom_start)],
+            ENTER_REPORT_CUSTOM_END: [MessageHandler(text_input_filter, report_custom_end_wrapper)]
         },
         fallbacks=[
             CommandHandler('cancel', cancel_command),

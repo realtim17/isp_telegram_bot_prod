@@ -57,6 +57,8 @@ CONFIRM_ROUTER_OPERATION = 29
 # Отчеты
 SELECT_REPORT_EMPLOYEE = 30
 SELECT_REPORT_PERIOD = 31
+ENTER_REPORT_CUSTOM_START = 32
+ENTER_REPORT_CUSTOM_END = 33
 
 # Типы подключений
 CONNECTION_TYPES = {
@@ -88,4 +90,3 @@ else:
 def is_admin(user_id: int) -> bool:
     """Проверка, является ли пользователь администратором"""
     return user_id in ADMIN_IDS
-
