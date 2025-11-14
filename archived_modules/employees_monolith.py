@@ -9,7 +9,8 @@ from config import (
     SELECT_EMPLOYEE_FOR_MATERIAL, SELECT_MATERIAL_ACTION, 
     ENTER_FIBER_AMOUNT, ENTER_TWISTED_AMOUNT,
     SELECT_EMPLOYEE_FOR_ROUTER, SELECT_ROUTER_ACTION,
-    ENTER_ROUTER_NAME, ENTER_ROUTER_QUANTITY
+    ENTER_ROUTER_NAME, ENTER_ROUTER_QUANTITY,
+    CONFIRM_ADD_EMPLOYEE, CONFIRM_MATERIAL_OPERATION, CONFIRM_ROUTER_OPERATION
 )
 from utils.keyboards import get_main_keyboard
 
@@ -32,7 +33,7 @@ async def manage_employees_start(update: Update, context: ContextTypes.DEFAULT_T
         [InlineKeyboardButton("➖ Удалить сотрудника", callback_data='manage_delete')],
         [InlineKeyboardButton("📦 Управление материалами", callback_data='manage_materials')],
         [InlineKeyboardButton("📡 Управление роутерами", callback_data='manage_routers')],
-        [InlineKeyboardButton("📋 Список сотрудников", callback_data='manage_list')],
+        [InlineKeyboardButton("👤 Список всех сотрудников", callback_data='manage_list')],
         [InlineKeyboardButton("❌ Отмена", callback_data='manage_cancel')]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -65,7 +66,7 @@ async def manage_action(update: Update, context: ContextTypes.DEFAULT_TYPE, db) 
             [InlineKeyboardButton("➖ Удалить сотрудника", callback_data='manage_delete')],
             [InlineKeyboardButton("📦 Управление материалами", callback_data='manage_materials')],
             [InlineKeyboardButton("📡 Управление роутерами", callback_data='manage_routers')],
-            [InlineKeyboardButton("📋 Список сотрудников", callback_data='manage_list')],
+            [InlineKeyboardButton("👤 Список всех сотрудников", callback_data='manage_list')],
             [InlineKeyboardButton("❌ Отмена", callback_data='manage_cancel')]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
@@ -171,18 +172,13 @@ async def manage_action(update: Update, context: ContextTypes.DEFAULT_TYPE, db) 
         employees = db.get_all_employees()
         
         if not employees:
-            text = "📋 <b>Список сотрудников</b>\n\nСписок пуст."
+            text = "👤 <b>Список всех сотрудников</b>\n\nСписок пуст."
         else:
             emp_lines = []
             for idx, emp in enumerate(employees, 1):
-                fiber = emp.get('fiber_balance', 0) or 0
-                twisted = emp.get('twisted_pair_balance', 0) or 0
-                emp_lines.append(
-                    f"{idx}. {emp['full_name']}\n"
-                    f"   📦 ВОЛС: {fiber}м | Витая пара: {twisted}м"
-                )
+                emp_lines.append(f"{idx}. {emp['full_name']}")
             emp_list = '\n\n'.join(emp_lines)
-            text = f"📋 <b>Список сотрудников ({len(employees)}):</b>\n\n{emp_list}"
+            text = f"👤 <b>Список всех сотрудников ({len(employees)}):</b>\n\n{emp_list}"
         
         keyboard = [[InlineKeyboardButton("◀️ Назад", callback_data='back_to_manage')]]
         reply_markup = InlineKeyboardMarkup(keyboard)
@@ -198,23 +194,68 @@ async def add_employee_name(update: Update, context: ContextTypes.DEFAULT_TYPE, 
     if len(full_name) < 3:
         await update.message.reply_text("⚠️ ФИО должно содержать минимум 3 символа. Попробуйте еще раз:")
         return ADD_EMPLOYEE_NAME
-    
-    employee_id = db.add_employee(full_name)
-    
-    if employee_id:
-        await update.message.reply_text(
-            f"✅ Сотрудник <b>{full_name}</b> успешно добавлен!",
-            parse_mode='HTML',
-            reply_markup=get_main_keyboard()
+
+    context.user_data['pending_employee_name'] = full_name
+
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("✅ Подтвердить", callback_data='confirm_add_employee')],
+        [InlineKeyboardButton("✏️ Изменить", callback_data='edit_add_employee')],
+        [InlineKeyboardButton("❌ Отмена", callback_data='manage_cancel')]
+    ])
+
+    await update.message.reply_text(
+        f"Вы ввели ФИО: <b>{full_name}</b>\n\nПодтвердить добавление?",
+        parse_mode='HTML',
+        reply_markup=keyboard
+    )
+
+    return CONFIRM_ADD_EMPLOYEE
+
+
+async def confirm_add_employee(update: Update, context: ContextTypes.DEFAULT_TYPE, db) -> int:
+    """Подтверждение добавления сотрудника"""
+    query = update.callback_query
+    await query.answer()
+
+    data = query.data
+
+    if data == 'manage_cancel':
+        context.user_data.pop('pending_employee_name', None)
+        await query.edit_message_text("❌ Добавление сотрудника отменено.")
+        await query.message.reply_text("Выберите действие:", reply_markup=get_main_keyboard())
+        return ConversationHandler.END
+
+    if data == 'edit_add_employee':
+        await query.edit_message_text(
+            "✏️ <b>Добавление сотрудника</b>\n\nВведите ФИО сотрудника:",
+            parse_mode='HTML'
         )
-    else:
-        await update.message.reply_text(
-            f"⚠️ Сотрудник <b>{full_name}</b> уже существует в системе!",
-            parse_mode='HTML',
-            reply_markup=get_main_keyboard()
-        )
-    
-    return ConversationHandler.END
+        return ADD_EMPLOYEE_NAME
+
+    if data == 'confirm_add_employee':
+        full_name = context.user_data.get('pending_employee_name')
+        if not full_name:
+            await query.edit_message_text("❌ Не найдено имя сотрудника. Попробуйте снова.")
+            return ADD_EMPLOYEE_NAME
+
+        employee_id = db.add_employee(full_name)
+        if employee_id:
+            await query.edit_message_text(
+                f"✅ Сотрудник <b>{full_name}</b> успешно добавлен!",
+                parse_mode='HTML'
+            )
+        else:
+            await query.edit_message_text(
+                f"⚠️ Сотрудник <b>{full_name}</b> уже существует в системе!",
+                parse_mode='HTML'
+            )
+
+        context.user_data.pop('pending_employee_name', None)
+        await query.message.reply_text("Выберите действие:", reply_markup=get_main_keyboard())
+        return ConversationHandler.END
+
+    await query.answer("Неизвестное действие", show_alert=True)
+    return CONFIRM_ADD_EMPLOYEE
 
 
 async def delete_employee_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE, db) -> int:
@@ -227,19 +268,41 @@ async def delete_employee_confirm(update: Update, context: ContextTypes.DEFAULT_
         await query.message.reply_text("Выберите действие:", reply_markup=get_main_keyboard())
         return ConversationHandler.END
     
-    emp_id = int(query.data.split('_')[2])
-    employee = db.get_employee_by_id(emp_id)
-    
-    if db.delete_employee(emp_id):
+    if query.data.startswith('del_emp_'):
+        emp_id = int(query.data.split('_')[2])
+        employee = db.get_employee_by_id(emp_id)
+        if not employee:
+            await query.edit_message_text("❌ Сотрудник не найден.")
+            await query.message.reply_text("Выберите действие:", reply_markup=get_main_keyboard())
+            return ConversationHandler.END
+        
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("✅ Подтвердить удаление", callback_data=f"confirm_delete_{emp_id}")],
+            [InlineKeyboardButton("❌ Отмена", callback_data='delete_cancel')]
+        ])
+        
         await query.edit_message_text(
-            f"✅ Сотрудник <b>{employee['full_name']}</b> удален!",
-            parse_mode='HTML'
+            f"Вы уверены, что хотите удалить сотрудника <b>{employee['full_name']}</b>?",
+            parse_mode='HTML',
+            reply_markup=keyboard
         )
-    else:
-        await query.edit_message_text("❌ Ошибка при удалении сотрудника.")
+        return DELETE_EMPLOYEE_SELECT
     
-    await query.message.reply_text("Выберите действие:", reply_markup=get_main_keyboard())
-    return ConversationHandler.END
+    if query.data.startswith('confirm_delete_'):
+        emp_id = int(query.data.split('_')[-1])
+        employee = db.get_employee_by_id(emp_id)
+        if employee and db.delete_employee(emp_id):
+            await query.edit_message_text(
+                f"✅ Сотрудник <b>{employee['full_name']}</b> удален!",
+                parse_mode='HTML'
+            )
+        else:
+            await query.edit_message_text("❌ Ошибка при удалении сотрудника.")
+        
+        await query.message.reply_text("Выберите действие:", reply_markup=get_main_keyboard())
+        return ConversationHandler.END
+    
+    return DELETE_EMPLOYEE_SELECT
 
 
 async def select_employee_for_material(update: Update, context: ContextTypes.DEFAULT_TYPE, db) -> int:
@@ -372,84 +435,138 @@ async def enter_fiber_amount(update: Update, context: ContextTypes.DEFAULT_TYPE,
 
 
 async def enter_twisted_amount(update: Update, context: ContextTypes.DEFAULT_TYPE, db) -> int:
-    """Ввод количества витой пары и выполнение операции"""
+    """Ввод количества витой пары и подготовка подтверждения"""
     try:
         twisted_amount = float(update.message.text.strip().replace(',', '.'))
         if twisted_amount < 0:
             raise ValueError
         
+        context.user_data['twisted_amount'] = twisted_amount
+        
         emp_id = context.user_data.get('selected_employee_id')
+        employee = db.get_employee_by_id(emp_id)
         fiber_amount = context.user_data.get('fiber_amount', 0)
         action = context.user_data.get('material_action')
+        action_text = "добавления" if action == 'add' else "списания"
+        sign = "+" if action == 'add' else "-"
         
-        employee = db.get_employee_by_id(emp_id)
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("✅ Подтвердить", callback_data='material_confirm')],
+            [InlineKeyboardButton("✏️ Изменить", callback_data='material_edit')],
+            [InlineKeyboardButton("❌ Отмена", callback_data='material_cancel')]
+        ])
         
-        if action == 'add':
-            success = db.add_material_to_employee(emp_id, fiber_amount, twisted_amount)
-            if success:
-                updated_emp = db.get_employee_by_id(emp_id)
-                new_fiber = updated_emp.get('fiber_balance', 0) or 0
-                new_twisted = updated_emp.get('twisted_pair_balance', 0) or 0
-                
-                await update.message.reply_text(
-                    f"✅ <b>Материалы добавлены!</b>\n\n"
-                    f"👤 Сотрудник: {employee['full_name']}\n\n"
-                    f"➕ Добавлено:\n"
-                    f"  • ВОЛС: +{fiber_amount} м\n"
-                    f"  • Витая пара: +{twisted_amount} м\n\n"
-                    f"📊 Новый баланс:\n"
-                    f"  • ВОЛС: {new_fiber} м\n"
-                    f"  • Витая пара: {new_twisted} м",
-                    parse_mode='HTML',
-                    reply_markup=get_main_keyboard()
-                )
-            else:
-                await update.message.reply_text(
-                    "❌ Ошибка при добавлении материалов.",
-                    reply_markup=get_main_keyboard()
-                )
-        else:  # deduct
-            success = db.deduct_material_from_employee(emp_id, fiber_amount, twisted_amount)
-            if success:
-                updated_emp = db.get_employee_by_id(emp_id)
-                new_fiber = updated_emp.get('fiber_balance', 0) or 0
-                new_twisted = updated_emp.get('twisted_pair_balance', 0) or 0
-                
-                await update.message.reply_text(
-                    f"✅ <b>Материалы списаны!</b>\n\n"
-                    f"👤 Сотрудник: {employee['full_name']}\n\n"
-                    f"➖ Списано:\n"
-                    f"  • ВОЛС: -{fiber_amount} м\n"
-                    f"  • Витая пара: -{twisted_amount} м\n\n"
-                    f"📊 Новый баланс:\n"
-                    f"  • ВОЛС: {new_fiber} м\n"
-                    f"  • Витая пара: {new_twisted} м",
-                    parse_mode='HTML',
-                    reply_markup=get_main_keyboard()
-                )
-            else:
-                old_fiber = employee.get('fiber_balance', 0) or 0
-                old_twisted = employee.get('twisted_pair_balance', 0) or 0
-                await update.message.reply_text(
-                    f"❌ <b>Недостаточно материалов!</b>\n\n"
-                    f"👤 Сотрудник: {employee['full_name']}\n\n"
-                    f"📊 Текущий баланс:\n"
-                    f"  • ВОЛС: {old_fiber} м\n"
-                    f"  • Витая пара: {old_twisted} м\n\n"
-                    f"❗ Требуется:\n"
-                    f"  • ВОЛС: {fiber_amount} м\n"
-                    f"  • Витая пара: {twisted_amount} м",
-                    parse_mode='HTML',
-                    reply_markup=get_main_keyboard()
-                )
-        
-        context.user_data.clear()
-        return ConversationHandler.END
+        await update.message.reply_text(
+            f"👤 Сотрудник: <b>{employee['full_name']}</b>\n"
+            f"📦 Действие: {action_text}\n\n"
+            f"ВОЛС: {sign}{fiber_amount} м\n"
+            f"Витая пара: {sign}{twisted_amount} м\n\n"
+            f"Подтвердить операцию?",
+            parse_mode='HTML',
+            reply_markup=keyboard
+        )
+        return CONFIRM_MATERIAL_OPERATION
     except ValueError:
         await update.message.reply_text(
             "⚠️ Пожалуйста, введите корректное число (например: 100 или 50.5)"
         )
         return ENTER_TWISTED_AMOUNT
+
+
+async def confirm_material_operation(update: Update, context: ContextTypes.DEFAULT_TYPE, db) -> int:
+    """Подтверждение операции с материалами"""
+    query = update.callback_query
+    await query.answer()
+    
+    data = query.data
+    if data == 'material_cancel':
+        context.user_data.clear()
+        await query.edit_message_text("❌ Операция с материалами отменена.")
+        await query.message.reply_text("Выберите действие:", reply_markup=get_main_keyboard())
+        return ConversationHandler.END
+    
+    if data == 'material_edit':
+        await query.edit_message_text(
+            "✏️ Введите количество метров ВОЛС заново:",
+            parse_mode='HTML'
+        )
+        context.user_data.pop('fiber_amount', None)
+        context.user_data.pop('twisted_amount', None)
+        return ENTER_FIBER_AMOUNT
+    
+    if data != 'material_confirm':
+        return CONFIRM_MATERIAL_OPERATION
+    
+    emp_id = context.user_data.get('selected_employee_id')
+    fiber_amount = context.user_data.get('fiber_amount', 0)
+    twisted_amount = context.user_data.get('twisted_amount', 0)
+    action = context.user_data.get('material_action')
+    
+    employee = db.get_employee_by_id(emp_id)
+    if not employee:
+        await query.edit_message_text("❌ Сотрудник не найден.")
+        context.user_data.clear()
+        await query.message.reply_text("Выберите действие:", reply_markup=get_main_keyboard())
+        return ConversationHandler.END
+    
+    if action == 'add':
+        success = db.add_material_to_employee(emp_id, fiber_amount, twisted_amount, created_by=update.effective_user.id)
+        if success:
+            updated_emp = db.get_employee_by_id(emp_id)
+            new_fiber = updated_emp.get('fiber_balance', 0) or 0
+            new_twisted = updated_emp.get('twisted_pair_balance', 0) or 0
+            
+            await query.edit_message_text(
+                f"✅ <b>Материалы добавлены!</b>\n\n"
+                f"👤 Сотрудник: {employee['full_name']}\n\n"
+                f"➕ Добавлено:\n"
+                f"  • ВОЛС: +{fiber_amount} м\n"
+                f"  • Витая пара: +{twisted_amount} м\n\n"
+                f"📊 Новый баланс:\n"
+                f"  • ВОЛС: {new_fiber} м\n"
+                f"  • Витая пара: {new_twisted} м",
+                parse_mode='HTML'
+            )
+        else:
+            await query.edit_message_text(
+                "❌ Ошибка при добавлении материалов."
+            )
+    else:
+        success = db.deduct_material_from_employee(emp_id, fiber_amount, twisted_amount, created_by=update.effective_user.id)
+        if success:
+            updated_emp = db.get_employee_by_id(emp_id)
+            new_fiber = updated_emp.get('fiber_balance', 0) or 0
+            new_twisted = updated_emp.get('twisted_pair_balance', 0) or 0
+            
+            await query.edit_message_text(
+                f"✅ <b>Материалы списаны!</b>\n\n"
+                f"👤 Сотрудник: {employee['full_name']}\n\n"
+                f"➖ Списано:\n"
+                f"  • ВОЛС: -{fiber_amount} м\n"
+                f"  • Витая пара: -{twisted_amount} м\n\n"
+                f"📊 Новый баланс:\n"
+                f"  • ВОЛС: {new_fiber} м\n"
+                f"  • Витая пара: {new_twisted} м",
+                parse_mode='HTML'
+            )
+        else:
+            old_fiber = employee.get('fiber_balance', 0) or 0
+            old_twisted = employee.get('twisted_pair_balance', 0) or 0
+            await query.edit_message_text(
+                f"❌ <b>Недостаточно материалов!</b>\n\n"
+                f"👤 Сотрудник: {employee['full_name']}\n\n"
+                f"📊 Текущий баланс:\n"
+                f"  • ВОЛС: {old_fiber} м\n"
+                f"  • Витая пара: {old_twisted} м\n\n"
+                f"❗ Требуется:\n"
+                f"  • ВОЛС: {fiber_amount} м\n"
+                f"  • Витая пара: {twisted_amount} м",
+                parse_mode='HTML'
+            )
+    
+    context.user_data.clear()
+    await query.message.reply_text("Выберите действие:", reply_markup=get_main_keyboard())
+    return ConversationHandler.END
 
 
 # ==================== УПРАВЛЕНИЕ РОУТЕРАМИ ====================
@@ -655,56 +772,106 @@ async def enter_router_quantity(update: Update, context: ContextTypes.DEFAULT_TY
         if quantity <= 0:
             raise ValueError
         
+        context.user_data['router_quantity'] = quantity
+        
         emp_id = context.user_data.get('selected_employee_id')
         router_name = context.user_data.get('router_name')
         action = context.user_data.get('router_action')
-        
         employee = db.get_employee_by_id(emp_id)
+        symbol = "+" if action == 'add' else "-"
         
-        if action == 'add':
-            success = db.add_router_to_employee(emp_id, router_name, quantity, created_by=update.effective_user.id)
-            if success:
-                new_quantity = db.get_router_quantity(emp_id, router_name)
-                await update.message.reply_text(
-                    f"✅ <b>Роутеры добавлены!</b>\n\n"
-                    f"👤 Сотрудник: {employee['full_name']}\n"
-                    f"📡 Роутер: {router_name}\n"
-                    f"➕ Добавлено: {quantity} шт.\n"
-                    f"📊 Всего: {new_quantity} шт.",
-                    parse_mode='HTML',
-                    reply_markup=get_main_keyboard()
-                )
-            else:
-                await update.message.reply_text(
-                    "❌ Ошибка при добавлении роутеров.",
-                    reply_markup=get_main_keyboard()
-                )
-        else:  # deduct
-            success = db.deduct_router_from_employee(emp_id, router_name, quantity, created_by=update.effective_user.id)
-            if success:
-                new_quantity = db.get_router_quantity(emp_id, router_name)
-                await update.message.reply_text(
-                    f"✅ <b>Роутеры списаны!</b>\n\n"
-                    f"👤 Сотрудник: {employee['full_name']}\n"
-                    f"📡 Роутер: {router_name}\n"
-                    f"➖ Списано: {quantity} шт.\n"
-                    f"📊 Осталось: {new_quantity} шт.",
-                    parse_mode='HTML',
-                    reply_markup=get_main_keyboard()
-                )
-            else:
-                await update.message.reply_text(
-                    "❌ Ошибка при списании роутеров (недостаточно в наличии).",
-                    reply_markup=get_main_keyboard()
-                )
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("✅ Подтвердить", callback_data='router_confirm')],
+            [InlineKeyboardButton("✏️ Изменить", callback_data='router_edit')],
+            [InlineKeyboardButton("❌ Отмена", callback_data='router_cancel')]
+        ])
         
-        context.user_data.clear()
-        return ConversationHandler.END
+        await update.message.reply_text(
+            f"👤 Сотрудник: <b>{employee['full_name']}</b>\n"
+            f"📡 Роутер: {router_name}\n"
+            f"Количество: {symbol}{quantity} шт.\n\n"
+            "Подтвердить операцию?",
+            parse_mode='HTML',
+            reply_markup=keyboard
+        )
+        
+        return CONFIRM_ROUTER_OPERATION
     except ValueError:
         await update.message.reply_text(
             "⚠️ Пожалуйста, введите корректное целое число (например: 5)"
         )
         return ENTER_ROUTER_QUANTITY
+
+
+async def confirm_router_operation(update: Update, context: ContextTypes.DEFAULT_TYPE, db) -> int:
+    """Подтверждение операций с роутерами"""
+    query = update.callback_query
+    await query.answer()
+    
+    data = query.data
+    if data == 'router_cancel':
+        context.user_data.clear()
+        await query.edit_message_text("❌ Операция с роутерами отменена.")
+        await query.message.reply_text("Выберите действие:", reply_markup=get_main_keyboard())
+        return ConversationHandler.END
+    
+    if data == 'router_edit':
+        await query.edit_message_text(
+            "✏️ Введите количество роутеров заново:",
+            parse_mode='HTML'
+        )
+        context.user_data.pop('router_quantity', None)
+        return ENTER_ROUTER_QUANTITY
+    
+    if data != 'router_confirm':
+        return CONFIRM_ROUTER_OPERATION
+    
+    emp_id = context.user_data.get('selected_employee_id')
+    router_name = context.user_data.get('router_name')
+    quantity = context.user_data.get('router_quantity', 0)
+    action = context.user_data.get('router_action')
+    employee = db.get_employee_by_id(emp_id)
+    
+    if not employee:
+        await query.edit_message_text("❌ Сотрудник не найден.")
+        context.user_data.clear()
+        await query.message.reply_text("Выберите действие:", reply_markup=get_main_keyboard())
+        return ConversationHandler.END
+    
+    if action == 'add':
+        success = db.add_router_to_employee(emp_id, router_name, quantity, created_by=query.from_user.id)
+        if success:
+            new_quantity = db.get_router_quantity(emp_id, router_name)
+            await query.edit_message_text(
+                f"✅ <b>Роутеры добавлены!</b>\n\n"
+                f"👤 Сотрудник: {employee['full_name']}\n"
+                f"📡 Роутер: {router_name}\n"
+                f"➕ Добавлено: {quantity} шт.\n"
+                f"📊 Всего: {new_quantity} шт.",
+                parse_mode='HTML'
+            )
+        else:
+            await query.edit_message_text("❌ Ошибка при добавлении роутеров.")
+    else:
+        success = db.deduct_router_from_employee(emp_id, router_name, quantity, created_by=query.from_user.id)
+        if success:
+            new_quantity = db.get_router_quantity(emp_id, router_name)
+            await query.edit_message_text(
+                f"✅ <b>Роутеры списаны!</b>\n\n"
+                f"👤 Сотрудник: {employee['full_name']}\n"
+                f"📡 Роутер: {router_name}\n"
+                f"➖ Списано: {quantity} шт.\n"
+                f"📊 Осталось: {new_quantity} шт.",
+                parse_mode='HTML'
+            )
+        else:
+            await query.edit_message_text(
+                "❌ Ошибка при списании роутеров (недостаточно в наличии)."
+            )
+    
+    context.user_data.clear()
+    await query.message.reply_text("Выберите действие:", reply_markup=get_main_keyboard())
+    return ConversationHandler.END
 
 
 # ==================== СПИСОК СОТРУДНИКОВ ====================
@@ -715,7 +882,7 @@ async def show_employees_list(update: Update, context: ContextTypes.DEFAULT_TYPE
     
     if not employees:
         await update.message.reply_text(
-            "📋 <b>Список сотрудников пуст</b>\n\n"
+            "📋 <b>Список сотрудников МОЛ пуст</b>\n\n"
             "Добавьте сотрудников через меню\n"
             "👥 Управление сотрудниками → ➕ Добавить сотрудника",
             parse_mode='HTML',
@@ -724,24 +891,35 @@ async def show_employees_list(update: Update, context: ContextTypes.DEFAULT_TYPE
         return
     
     # Формируем сообщение со списком сотрудников
-    message = "👤 <b>Список сотрудников</b>\n\n"
-    
-    for idx, emp in enumerate(employees, 1):
-        emp_name = emp['full_name']
+    filtered = []
+    for emp in employees:
         fiber_balance = emp.get('fiber_balance', 0) or 0
         twisted_balance = emp.get('twisted_pair_balance', 0) or 0
-        
-        # Получаем роутеры сотрудника
         routers = db.get_employee_routers(emp['id'])
         router_count = sum(r['quantity'] for r in routers)
         
+        if fiber_balance > 0 or twisted_balance > 0 or router_count > 0:
+            filtered.append((emp, fiber_balance, twisted_balance, routers, router_count))
+    
+    if not filtered:
+        await update.message.reply_text(
+            "📋 <b>Список сотрудников МОЛ пуст</b>\n\n"
+            "Нет сотрудников с материалами или оборудованием.",
+            parse_mode='HTML',
+            reply_markup=get_main_keyboard()
+        )
+        return
+    
+    message = "📋 <b>Список сотрудников МОЛ</b>\n\n"
+    
+    for idx, (emp, fiber_balance, twisted_balance, routers, router_count) in enumerate(filtered, 1):
+        emp_name = emp['full_name']
         message += f"{idx}. <b>{emp_name}</b>\n"
         message += f"   📦 Материалы:\n"
         message += f"   • ВОЛС: {fiber_balance} м\n"
         message += f"   • Витая пара: {twisted_balance} м\n"
         message += f"   📡 Роутеры: {router_count} шт.\n"
         
-        # Показываем детали по роутерам
         if routers:
             message += "   Модели:\n"
             for router in routers:
@@ -750,11 +928,10 @@ async def show_employees_list(update: Update, context: ContextTypes.DEFAULT_TYPE
         message += "\n"
     
     message += "━━━━━━━━━━━━━━━━━━━━━━\n"
-    message += f"<b>Всего сотрудников:</b> {len(employees)}"
+    message += f"<b>Всего сотрудников:</b> {len(filtered)}"
     
     await update.message.reply_text(
         message,
         parse_mode='HTML',
         reply_markup=get_main_keyboard()
     )
-

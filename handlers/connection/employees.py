@@ -1,14 +1,15 @@
 """
 Обработчики выбора исполнителей для подключения
 """
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update, InlineKeyboardButton
 from telegram.ext import ContextTypes
 
 from config import SELECT_EMPLOYEES, logger
-from database import Database
+from utils.helpers import run_in_thread
+from handlers.connection.ui import build_inline_keyboard
 
 
-async def select_employee_toggle(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+async def select_employee_toggle(update: Update, context: ContextTypes.DEFAULT_TYPE, db) -> int:
     """Переключение выбора сотрудника"""
     query = update.callback_query
     await query.answer()
@@ -21,7 +22,6 @@ async def select_employee_toggle(update: Update, context: ContextTypes.DEFAULT_T
             return SELECT_EMPLOYEES
         
         # Проверяем балансы и определяем, кто будет платить за материалы
-        db = Database()
         from handlers.connection.validation import check_materials_and_proceed
         return await check_materials_and_proceed(update, context, db)
     
@@ -37,8 +37,7 @@ async def select_employee_toggle(update: Update, context: ContextTypes.DEFAULT_T
     context.user_data['selected_employees'] = selected
     
     # Обновляем клавиатуру
-    db = Database()
-    employees = db.get_all_employees()
+    employees = await run_in_thread(db.get_all_employees) or []
     keyboard = []
     
     for emp in employees:
@@ -50,8 +49,7 @@ async def select_employee_toggle(update: Update, context: ContextTypes.DEFAULT_T
         )])
     
     keyboard.append([InlineKeyboardButton("✅ Готово", callback_data='employees_done')])
-    keyboard.append([InlineKeyboardButton("❌ Отмена", callback_data='cancel_connection')])
-    reply_markup = InlineKeyboardMarkup(keyboard)
+    reply_markup = build_inline_keyboard(keyboard)
     
     try:
         await query.edit_message_reply_markup(reply_markup=reply_markup)
@@ -59,4 +57,3 @@ async def select_employee_toggle(update: Update, context: ContextTypes.DEFAULT_T
         pass
     
     return SELECT_EMPLOYEES
-

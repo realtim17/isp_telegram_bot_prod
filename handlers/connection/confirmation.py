@@ -7,8 +7,7 @@ from telegram.ext import ContextTypes, ConversationHandler
 
 from config import CONFIRM, CONNECTION_TYPES, logger
 from utils.keyboards import get_main_keyboard
-from utils.helpers import send_connection_report
-from database import Database
+from utils.helpers import send_connection_report, run_in_thread
 
 
 async def show_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE, db) -> int:
@@ -20,7 +19,7 @@ async def show_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE, 
     selected_employees = context.user_data.get('selected_employees', [])
     
     # Получаем имена выбранных сотрудников
-    employees = db.get_all_employees()
+    employees = await run_in_thread(db.get_all_employees) or []
     employee_names = [emp['full_name'] for emp in employees if emp['id'] in selected_employees]
     
     # Получаем читаемое название типа подключения
@@ -38,12 +37,12 @@ async def show_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE, 
     
     payer_info = ""
     if material_payer_id:
-        payer = db.get_employee_by_id(material_payer_id)
+        payer = await run_in_thread(db.get_employee_by_id, material_payer_id)
         if payer:
             payer_info += f"\n\n💰 <b>Материалы списываются с:</b> {payer['full_name']}"
     
     if router_payer_id:
-        router_payer = db.get_employee_by_id(router_payer_id)
+        router_payer = await run_in_thread(db.get_employee_by_id, router_payer_id)
         if router_payer:
             router_quantity = data.get('router_quantity', 1)
             quantity_text = f" ({router_quantity} шт.)" if router_quantity > 1 else ""
@@ -80,7 +79,6 @@ async def show_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE, 
 <b>📋 Подтверждение данных</b>
 
 <b>📍 Адрес:</b> {data['address']}
-
 <b>Тип подключения:</b> {type_name}
 <b>Модель роутера:</b> {router_display}
 <b>Доступ на роутер:</b> {router_access_status}
@@ -119,7 +117,7 @@ async def show_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE, 
     return CONFIRM
 
 
-async def confirm_connection(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+async def confirm_connection(update: Update, context: ContextTypes.DEFAULT_TYPE, db) -> int:
     """Подтверждение и сохранение подключения"""
     query = update.callback_query
     await query.answer()
@@ -137,7 +135,6 @@ async def confirm_connection(update: Update, context: ContextTypes.DEFAULT_TYPE)
         return ConversationHandler.END
     
     # Сохраняем в БД
-    db = Database()
     data = context.user_data['connection_data']
     photos = context.user_data.get('photos', [])
     selected_employees = context.user_data.get('selected_employees', [])
@@ -150,7 +147,8 @@ async def confirm_connection(update: Update, context: ContextTypes.DEFAULT_TYPE)
     router_access = data.get('router_access', False)
     telegram_bot_connected = data.get('telegram_bot_connected', False)
     
-    connection_id = db.create_connection(
+    connection_id = await run_in_thread(
+        db.create_connection,
         connection_type=data.get('connection_type', 'mkd'),
         address=data['address'],
         router_model=data['router_model'],
@@ -171,7 +169,8 @@ async def confirm_connection(update: Update, context: ContextTypes.DEFAULT_TYPE)
         # Списываем роутер, если указан плательщик и роутер не пропущен
         router_model = data.get('router_model', '-')
         if router_payer_id and router_model != '-' and router_model:
-            success = db.deduct_router_from_employee(
+            success = await run_in_thread(
+                db.deduct_router_from_employee,
                 router_payer_id, 
                 router_model, 
                 router_quantity,
@@ -206,4 +205,3 @@ async def confirm_connection(update: Update, context: ContextTypes.DEFAULT_TYPE)
     
     context.user_data.clear()
     return ConversationHandler.END
-

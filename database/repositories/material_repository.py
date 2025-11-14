@@ -1,6 +1,7 @@
 """
 Репозиторий для работы с материалами сотрудников
 """
+import sqlite3
 from typing import List, Dict, Optional
 from datetime import datetime
 import logging
@@ -14,17 +15,19 @@ class MaterialRepository(BaseRepository):
     """Репозиторий для управления материалами (ВОЛС и витая пара)"""
     
     def add_material(
-        self, 
-        employee_id: int, 
-        fiber_meters: float = 0, 
+        self,
+        employee_id: int,
+        fiber_meters: float = 0,
         twisted_pair_meters: float = 0,
-        created_by: Optional[int] = None
+        created_by: Optional[int] = None,
+        connection: Optional[sqlite3.Connection] = None
     ) -> bool:
         """Добавить материалы на баланс сотрудника"""
+        own_connection = connection is None
+        conn = connection or self.get_connection()
+        cursor = conn.cursor()
+        
         try:
-            conn = self.get_connection()
-            cursor = conn.cursor()
-            
             cursor.execute("""
                 UPDATE employees 
                 SET fiber_balance = fiber_balance + ?,
@@ -32,38 +35,48 @@ class MaterialRepository(BaseRepository):
                 WHERE id = ?
             """, (fiber_meters, twisted_pair_meters, employee_id))
             
-            updated = cursor.rowcount > 0
+            if cursor.rowcount == 0:
+                return False
             
-            if updated:
-                # Получаем новый баланс
-                cursor.execute("""
-                    SELECT fiber_balance, twisted_pair_balance 
-                    FROM employees WHERE id = ?
-                """, (employee_id,))
-                row = cursor.fetchone()
-                new_fiber = row[0] if row else 0
-                new_twisted = row[1] if row else 0
-                
+            cursor.execute("""
+                SELECT fiber_balance, twisted_pair_balance 
+                FROM employees WHERE id = ?
+            """, (employee_id,))
+            row = cursor.fetchone()
+            new_fiber = row['fiber_balance'] if row else 0
+            new_twisted = row['twisted_pair_balance'] if row else 0
+            
+            if fiber_meters > 0:
+                if not self.log_movement(
+                    employee_id, 'add', 'fiber', 'ВОЛС',
+                    fiber_meters, new_fiber, None, created_by,
+                    cursor=cursor
+                ):
+                    raise RuntimeError("Не удалось записать движение по ВОЛС")
+            if twisted_pair_meters > 0:
+                if not self.log_movement(
+                    employee_id, 'add', 'twisted_pair', 'Витая пара',
+                    twisted_pair_meters, new_twisted, None, created_by,
+                    cursor=cursor
+                ):
+                    raise RuntimeError("Не удалось записать движение по витой паре")
+            
+            if own_connection:
                 conn.commit()
-                conn.close()
-                
-                # Логируем операции
-                if fiber_meters > 0:
-                    self.log_movement(employee_id, 'add', 'fiber', 'ВОЛС', 
-                                    fiber_meters, new_fiber, None, created_by)
-                if twisted_pair_meters > 0:
-                    self.log_movement(employee_id, 'add', 'twisted_pair', 'Витая пара',
-                                    twisted_pair_meters, new_twisted, None, created_by)
-                
-                logger.info(f"Добавлено материалов сотруднику ID {employee_id}: "
-                          f"ВОЛС +{fiber_meters}м, Витая пара +{twisted_pair_meters}м")
-            else:
-                conn.close()
             
-            return updated
-        except Exception as e:
-            logger.error(f"Ошибка при добавлении материалов: {e}")
+            logger.info(
+                "Добавлено материалов сотруднику ID %s: ВОЛС +%sм, Витая пара +%sм",
+                employee_id, fiber_meters, twisted_pair_meters
+            )
+            return True
+        except Exception as exc:
+            if own_connection:
+                conn.rollback()
+            logger.error(f"Ошибка при добавлении материалов: {exc}")
             return False
+        finally:
+            if own_connection:
+                conn.close()
     
     def deduct_material(
         self,
@@ -71,14 +84,15 @@ class MaterialRepository(BaseRepository):
         fiber_meters: float = 0,
         twisted_pair_meters: float = 0,
         connection_id: Optional[int] = None,
-        created_by: Optional[int] = None
+        created_by: Optional[int] = None,
+        connection: Optional[sqlite3.Connection] = None
     ) -> bool:
         """Списать материалы с баланса сотрудника"""
+        own_connection = connection is None
+        conn = connection or self.get_connection()
+        cursor = conn.cursor()
+        
         try:
-            conn = self.get_connection()
-            cursor = conn.cursor()
-            
-            # Проверяем текущий баланс
             cursor.execute("""
                 SELECT fiber_balance, twisted_pair_balance 
                 FROM employees 
@@ -87,25 +101,20 @@ class MaterialRepository(BaseRepository):
             row = cursor.fetchone()
             
             if not row:
-                logger.warning(f"Сотрудник ID {employee_id} не найден")
-                conn.close()
+                logger.warning("Сотрудник ID %s не найден", employee_id)
                 return False
             
-            current_fiber = row[0] or 0
-            current_twisted = row[1] or 0
+            current_fiber = row['fiber_balance'] or 0
+            current_twisted = row['twisted_pair_balance'] or 0
             
-            # Проверяем достаточность средств
             if current_fiber < fiber_meters:
-                logger.warning(f"Недостаточно ВОЛС у сотрудника ID {employee_id}")
-                conn.close()
+                logger.warning("Недостаточно ВОЛС у сотрудника ID %s", employee_id)
                 return False
             
             if current_twisted < twisted_pair_meters:
-                logger.warning(f"Недостаточно витой пары у сотрудника ID {employee_id}")
-                conn.close()
+                logger.warning("Недостаточно витой пары у сотрудника ID %s", employee_id)
                 return False
             
-            # Списываем материалы
             cursor.execute("""
                 UPDATE employees 
                 SET fiber_balance = fiber_balance - ?,
@@ -113,32 +122,43 @@ class MaterialRepository(BaseRepository):
                 WHERE id = ?
             """, (fiber_meters, twisted_pair_meters, employee_id))
             
-            updated = cursor.rowcount > 0
+            if cursor.rowcount == 0:
+                return False
             
-            if updated:
-                new_fiber = current_fiber - fiber_meters
-                new_twisted = current_twisted - twisted_pair_meters
-                
+            new_fiber = current_fiber - fiber_meters
+            new_twisted = current_twisted - twisted_pair_meters
+            
+            if fiber_meters > 0:
+                if not self.log_movement(
+                    employee_id, 'deduct', 'fiber', 'ВОЛС',
+                    fiber_meters, new_fiber, connection_id, created_by,
+                    cursor=cursor
+                ):
+                    raise RuntimeError("Не удалось зафиксировать списание ВОЛС")
+            if twisted_pair_meters > 0:
+                if not self.log_movement(
+                    employee_id, 'deduct', 'twisted_pair', 'Витая пара',
+                    twisted_pair_meters, new_twisted, connection_id, created_by,
+                    cursor=cursor
+                ):
+                    raise RuntimeError("Не удалось зафиксировать списание витой пары")
+            
+            if own_connection:
                 conn.commit()
-                conn.close()
-                
-                # Логируем операции
-                if fiber_meters > 0:
-                    self.log_movement(employee_id, 'deduct', 'fiber', 'ВОЛС',
-                                    fiber_meters, new_fiber, connection_id, created_by)
-                if twisted_pair_meters > 0:
-                    self.log_movement(employee_id, 'deduct', 'twisted_pair', 'Витая пара',
-                                    twisted_pair_meters, new_twisted, connection_id, created_by)
-                
-                logger.info(f"Списано материалов у сотрудника ID {employee_id}: "
-                          f"ВОЛС -{fiber_meters}м, Витая пара -{twisted_pair_meters}м")
-            else:
-                conn.close()
             
-            return updated
-        except Exception as e:
-            logger.error(f"Ошибка при списании материалов: {e}")
+            logger.info(
+                "Списано материалов у сотрудника ID %s: ВОЛС -%sм, Витая пара -%sм",
+                employee_id, fiber_meters, twisted_pair_meters
+            )
+            return True
+        except Exception as exc:
+            if own_connection:
+                conn.rollback()
+            logger.error(f"Ошибка при списании материалов: {exc}")
             return False
+        finally:
+            if own_connection:
+                conn.close()
     
     def log_movement(
         self,
@@ -149,23 +169,44 @@ class MaterialRepository(BaseRepository):
         quantity: float,
         balance_after: float,
         connection_id: Optional[int] = None,
-        created_by: Optional[int] = None
+        created_by: Optional[int] = None,
+        cursor: Optional[sqlite3.Cursor] = None
     ) -> bool:
         """Записать движение материала в лог"""
+        own_connection = cursor is None
+        conn = None
+        
         try:
-            self.execute_query("""
+            if cursor is None:
+                conn = self.get_connection()
+                cursor = conn.cursor()
+            
+            cursor.execute("""
                 INSERT INTO material_movement_log 
                 (employee_id, operation_type, item_type, item_name, quantity, 
                  balance_after, connection_id, created_by)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            """, (employee_id, operation_type, item_type, item_name, quantity,
-                  balance_after, connection_id, created_by))
+            """, (
+                employee_id, operation_type, item_type, item_name,
+                quantity, balance_after, connection_id, created_by
+            ))
             
-            logger.info(f"Logged movement: {operation_type} {quantity} {item_type} for employee {employee_id}")
+            if own_connection and conn:
+                conn.commit()
+            
+            logger.info(
+                "Logged movement: %s %s %s for employee %s",
+                operation_type, quantity, item_type, employee_id
+            )
             return True
-        except Exception as e:
-            logger.error(f"Ошибка при логировании движения: {e}")
+        except Exception as exc:
+            if own_connection and conn:
+                conn.rollback()
+            logger.error(f"Ошибка при логировании движения: {exc}")
             return False
+        finally:
+            if own_connection and conn:
+                conn.close()
     
     def get_movements(
         self,
@@ -190,7 +231,6 @@ class MaterialRepository(BaseRepository):
                   AND created_at <= ?
                 ORDER BY created_at
             """, (employee_id, start_date, end_date), fetch_all=True) or []
-        except Exception as e:
-            logger.error(f"Ошибка при получении движений: {e}")
+        except Exception as exc:
+            logger.error(f"Ошибка при получении движений: {exc}")
             return []
-

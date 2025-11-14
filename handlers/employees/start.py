@@ -37,7 +37,7 @@ async def manage_employees_start(flow: "EmployeeFlow", update: Update, context: 
         [InlineKeyboardButton("➖ Удалить сотрудника", callback_data="manage_delete")],
         [InlineKeyboardButton("📦 Управление материалами", callback_data="manage_materials")],
         [InlineKeyboardButton("📡 Управление роутерами", callback_data="manage_routers")],
-        [InlineKeyboardButton("📋 Список сотрудников", callback_data="manage_list")],
+        [InlineKeyboardButton("👤 Список всех сотрудников", callback_data="manage_list")],
         [InlineKeyboardButton("❌ Отмена", callback_data="manage_cancel")],
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -155,17 +155,12 @@ async def manage_action(flow: "EmployeeFlow", update: Update, context: ContextTy
     if data == "manage_list":
         employees = flow.db.get_all_employees()
         if not employees:
-            text = "📋 <b>Список сотрудников</b>\n\nСписок пуст."
+            text = "👤 <b>Список всех сотрудников</b>\n\nСписок пуст."
         else:
             lines = []
             for idx, emp in enumerate(employees, 1):
-                fiber = emp.get("fiber_balance", 0) or 0
-                twisted = emp.get("twisted_pair_balance", 0) or 0
-                lines.append(
-                    f"{idx}. {emp['full_name']}\n"
-                    f"   📦 ВОЛС: {fiber}м | Витая пара: {twisted}м"
-                )
-            text = f"📋 <b>Список сотрудников ({len(employees)}):</b>\n\n" + "\n\n".join(lines)
+                lines.append(f"{idx}. {emp['full_name']}")
+            text = f"👤 <b>Список всех сотрудников ({len(employees)}):</b>\n\n" + "\n\n".join(lines)
 
         keyboard = [[InlineKeyboardButton("◀️ Назад", callback_data="back_to_manage")]]
         await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
@@ -174,5 +169,3 @@ async def manage_action(flow: "EmployeeFlow", update: Update, context: ContextTy
     logger.warning("Необработанное действие управления сотрудниками: %s", data)
     await query.message.reply_text("Выберите действие:", reply_markup=get_main_keyboard())
     return ConversationHandler.END
-
-

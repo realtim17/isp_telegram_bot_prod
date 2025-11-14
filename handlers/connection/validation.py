@@ -1,12 +1,13 @@
 """
 Проверка наличия материалов и роутеров у исполнителей
 """
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update, InlineKeyboardButton
 from telegram.ext import ContextTypes, ConversationHandler
 
 from config import SELECT_MATERIAL_PAYER, SELECT_ROUTER_PAYER
 from utils.keyboards import get_main_keyboard
-from database import Database
+from utils.helpers import run_in_thread
+from handlers.connection.ui import build_inline_keyboard
 
 
 async def check_materials_and_proceed(update: Update, context: ContextTypes.DEFAULT_TYPE, db) -> int:
@@ -21,7 +22,7 @@ async def check_materials_and_proceed(update: Update, context: ContextTypes.DEFA
     # Получаем балансы всех выбранных сотрудников
     employees_with_balance = []
     for emp_id in selected_employees:
-        emp = db.get_employee_by_id(emp_id)
+        emp = await run_in_thread(db.get_employee_by_id, emp_id)
         if emp:
             fiber_balance = emp.get('fiber_balance', 0) or 0
             twisted_balance = emp.get('twisted_pair_balance', 0) or 0
@@ -69,15 +70,14 @@ async def check_materials_and_proceed(update: Update, context: ContextTypes.DEFA
     
     else:
         # У нескольких есть материалы - предлагаем выбрать
-        keyboard = []
-        for emp in employees_with_enough:
-            keyboard.append([InlineKeyboardButton(
+        keyboard = [
+            [InlineKeyboardButton(
                 f"💰 {emp['name']} (ВОЛС: {emp['fiber']}м, ВП: {emp['twisted']}м)",
                 callback_data=f"payer_{emp['id']}"
-            )])
-        
-        keyboard.append([InlineKeyboardButton("❌ Отмена", callback_data='cancel_connection')])
-        reply_markup = InlineKeyboardMarkup(keyboard)
+            )]
+            for emp in employees_with_enough
+        ]
+        reply_markup = build_inline_keyboard(keyboard)
         
         await query.edit_message_text(
             f"💰 <b>Выбор плательщика материалов</b>\n\n"
@@ -93,7 +93,7 @@ async def check_materials_and_proceed(update: Update, context: ContextTypes.DEFA
         return SELECT_MATERIAL_PAYER
 
 
-async def select_material_payer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+async def select_material_payer(update: Update, context: ContextTypes.DEFAULT_TYPE, db) -> int:
     """Обработка выбора плательщика материалов"""
     query = update.callback_query
     await query.answer()
@@ -101,7 +101,6 @@ async def select_material_payer(update: Update, context: ContextTypes.DEFAULT_TY
     payer_id = int(query.data.split('_')[1])
     context.user_data['material_payer_id'] = payer_id
     
-    db = Database()
     # Переходим к проверке роутеров
     return await check_routers_and_proceed(update, context, db)
 
@@ -123,9 +122,9 @@ async def check_routers_and_proceed(update: Update, context: ContextTypes.DEFAUL
     # Получаем информацию о роутерах у сотрудников
     employees_with_router = []
     for emp_id in selected_employees:
-        emp = db.get_employee_by_id(emp_id)
+        emp = await run_in_thread(db.get_employee_by_id, emp_id)
         if emp:
-            router_quantity = db.get_router_quantity(emp_id, router_model)
+            router_quantity = await run_in_thread(db.get_router_quantity, emp_id, router_model)
             has_enough = router_quantity >= required_quantity
             employees_with_router.append({
                 'id': emp_id,
@@ -168,15 +167,14 @@ async def check_routers_and_proceed(update: Update, context: ContextTypes.DEFAUL
     
     else:
         # У нескольких есть достаточно роутеров - предлагаем выбрать
-        keyboard = []
-        for emp in employees_with_enough:
-            keyboard.append([InlineKeyboardButton(
+        keyboard = [
+            [InlineKeyboardButton(
                 f"📡 {emp['name']} ({emp['quantity']} шт.)",
                 callback_data=f"router_payer_{emp['id']}"
-            )])
-        
-        keyboard.append([InlineKeyboardButton("❌ Отмена", callback_data='cancel_connection')])
-        reply_markup = InlineKeyboardMarkup(keyboard)
+            )]
+            for emp in employees_with_enough
+        ]
+        reply_markup = build_inline_keyboard(keyboard)
         
         quantity_text = f"{required_quantity} шт." if required_quantity > 1 else "1 шт."
         await query.edit_message_text(
@@ -191,7 +189,7 @@ async def check_routers_and_proceed(update: Update, context: ContextTypes.DEFAUL
         return SELECT_ROUTER_PAYER
 
 
-async def select_router_payer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+async def select_router_payer(update: Update, context: ContextTypes.DEFAULT_TYPE, db) -> int:
     """Обработка выбора плательщика роутера"""
     query = update.callback_query
     await query.answer()
@@ -199,7 +197,5 @@ async def select_router_payer(update: Update, context: ContextTypes.DEFAULT_TYPE
     payer_id = int(query.data.split('_')[-1])
     context.user_data['router_payer_id'] = payer_id
     
-    db = Database()
     from handlers.connection.confirmation import show_confirmation
     return await show_confirmation(update, context, db)
-

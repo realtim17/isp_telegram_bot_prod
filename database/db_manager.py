@@ -135,6 +135,16 @@ class Database:
             )
         """)
         
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_connections_created_at
+            ON connections (created_at)
+        """)
+        
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_connection_employees_employee
+            ON connection_employees (employee_id)
+        """)
+        
         # Таблица фотографий подключений
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS connection_photos (
@@ -183,6 +193,11 @@ class Database:
                 FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE,
                 FOREIGN KEY (connection_id) REFERENCES connections(id) ON DELETE SET NULL
             )
+        """)
+        
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_material_movement_employee_created
+            ON material_movement_log (employee_id, created_at)
         """)
         
         conn.commit()
@@ -320,105 +335,62 @@ class Database:
             material_payer_id: ID сотрудника, с которого списывать материалы.
                               Если None, материалы списываются поровну со всех.
         """
+        conn = None
         try:
             conn = self.get_connection()
             cursor = conn.cursor()
             
-            # Создаем запись подключения
             cursor.execute("""
                 INSERT INTO connections 
                 (connection_type, address, router_model, port, fiber_meters, twisted_pair_meters, created_by, router_quantity, contract_signed, router_access, telegram_bot_connected)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (connection_type, address, router_model, port, fiber_meters, twisted_pair_meters, created_by, router_quantity, 1 if contract_signed else 0, 1 if router_access else 0, 1 if telegram_bot_connected else 0))
+            """, (
+                connection_type, address, router_model, port,
+                fiber_meters, twisted_pair_meters, created_by,
+                router_quantity, 1 if contract_signed else 0,
+                1 if router_access else 0, 1 if telegram_bot_connected else 0
+            ))
             
             connection_id = cursor.lastrowid
             
-            # Связываем всех сотрудников с подключением
             for emp_id in employee_ids:
                 cursor.execute("""
                     INSERT INTO connection_employees (connection_id, employee_id)
                     VALUES (?, ?)
                 """, (connection_id, emp_id))
             
-            # Списываем материалы
             if material_payer_id:
-                # Списываем весь материал с одного сотрудника
-                cursor.execute("""
-                    SELECT fiber_balance, twisted_pair_balance 
-                    FROM employees 
-                    WHERE id = ?
-                """, (material_payer_id,))
-                row = cursor.fetchone()
-                
-                if not row:
-                    logger.error(f"Сотрудник ID {material_payer_id} не найден")
-                    conn.close()
-                    return None
-                
-                current_fiber = row[0] or 0
-                current_twisted = row[1] or 0
-                
-                # Проверяем достаточность материалов
-                if current_fiber < fiber_meters:
-                    logger.warning(f"Недостаточно ВОЛС у сотрудника ID {material_payer_id}: "
-                                 f"есть {current_fiber}м, требуется {fiber_meters}м")
-                    conn.close()
-                    return None
-                
-                if current_twisted < twisted_pair_meters:
-                    logger.warning(f"Недостаточно витой пары у сотрудника ID {material_payer_id}: "
-                                 f"есть {current_twisted}м, требуется {twisted_pair_meters}м")
-                    conn.close()
-                    return None
-                
-                # Сохраняем в БД перед логированием
-                conn.commit()
-                conn.close()
-                
-                # Списываем весь материал с одного сотрудника (с логированием)
-                success = self.deduct_material_from_employee(
-                    material_payer_id, fiber_meters, twisted_pair_meters,
-                    connection_id, created_by
+                success = self.materials_repo.deduct_material(
+                    material_payer_id,
+                    fiber_meters,
+                    twisted_pair_meters,
+                    connection_id,
+                    created_by,
+                    connection=conn
                 )
-                
                 if not success:
-                    logger.error(f"Не удалось списать материалы с сотрудника ID {material_payer_id}")
-                    return None
-                
-                logger.info(f"Списано у сотрудника ID {material_payer_id}: "
-                          f"ВОЛС -{fiber_meters}м, Витая пара -{twisted_pair_meters}м (полная сумма)")
-                
-                # Переоткрываем соединение для фото
-                conn = self.get_connection()
-                cursor = conn.cursor()
+                    raise RuntimeError(
+                        f"Не удалось списать материалы с сотрудника ID {material_payer_id}"
+                    )
             else:
-                # Старая логика: делим поровну между всеми
                 emp_count = len(employee_ids)
                 fiber_per_emp = fiber_meters / emp_count if emp_count > 0 else 0
                 twisted_per_emp = twisted_pair_meters / emp_count if emp_count > 0 else 0
                 
-                # Сохраняем в БД перед логированием
-                conn.commit()
-                conn.close()
-                
                 for emp_id in employee_ids:
-                    # Списываем с логированием
-                    success = self.deduct_material_from_employee(
-                        emp_id, fiber_per_emp, twisted_per_emp,
-                        connection_id, created_by
+                    success = self.materials_repo.deduct_material(
+                        emp_id,
+                        fiber_per_emp,
+                        twisted_per_emp,
+                        connection_id,
+                        created_by,
+                        connection=conn
                     )
-                    
                     if not success:
-                        logger.error(f"Не удалось списать материалы с сотрудника ID {emp_id}")
-                    else:
-                        logger.info(f"Списано у сотрудника ID {emp_id}: "
-                                  f"ВОЛС -{fiber_per_emp}м, Витая пара -{twisted_per_emp}м")
-                
-                # Переоткрываем соединение для фото
-                conn = self.get_connection()
-                cursor = conn.cursor()
+                        raise RuntimeError(
+                            f"Не удалось списать материалы с сотрудника ID {emp_id}"
+                        )
             
-            # Сохраняем фотографии
             for idx, photo_id in enumerate(photo_file_ids):
                 cursor.execute("""
                     INSERT INTO connection_photos (connection_id, photo_file_id, photo_category, photo_order)
@@ -426,12 +398,16 @@ class Database:
                 """, (connection_id, photo_id, 'general', idx))
             
             conn.commit()
-            conn.close()
             logger.info(f"Создано подключение ID: {connection_id}, материалы списаны")
             return connection_id
         except Exception as e:
+            if conn:
+                conn.rollback()
             logger.error(f"Ошибка при создании подключения: {e}")
             return None
+        finally:
+            if conn:
+                conn.close()
     
     def get_connection_by_id(self, connection_id: int) -> Optional[Dict]:
         """Получить подключение по ID"""
@@ -461,7 +437,6 @@ class Database:
         conn = self.get_connection()
         cursor = conn.cursor()
         
-        # Формируем условие по дате
         date_condition = ""
         params = [employee_id]
         if start_date and end_date:
@@ -476,7 +451,6 @@ class Database:
             date_condition = "AND c.created_at >= ?"
             params.append(date_limit.strftime("%Y-%m-%d %H:%M:%S"))
         
-        # Получаем подключения с участием сотрудника
         query = f"""
             SELECT 
                 c.id,
@@ -487,42 +461,48 @@ class Database:
                 c.fiber_meters,
                 c.twisted_pair_meters,
                 c.created_at,
-                COUNT(DISTINCT ce.employee_id) as employee_count
+                COUNT(DISTINCT ce_all.employee_id) as employee_count
             FROM connections c
-            JOIN connection_employees ce ON c.id = ce.connection_id
-            WHERE ce.connection_id IN (
-                SELECT connection_id 
-                FROM connection_employees 
-                WHERE employee_id = ?
-            )
+            JOIN connection_employees ce_target 
+                ON ce_target.connection_id = c.id AND ce_target.employee_id = ?
+            JOIN connection_employees ce_all 
+                ON ce_all.connection_id = c.id
+            WHERE 1=1
             {date_condition}
             GROUP BY c.id
             ORDER BY c.created_at DESC
         """
         
         cursor.execute(query, params)
-        connections = []
+        rows = cursor.fetchall()
         
+        connection_ids = [row['id'] for row in rows]
+        employees_map: Dict[int, List[str]] = {}
+        
+        if connection_ids:
+            placeholders = ",".join("?" for _ in connection_ids)
+            cursor.execute(f"""
+                SELECT ce.connection_id, e.full_name
+                FROM connection_employees ce
+                JOIN employees e ON e.id = ce.employee_id
+                WHERE ce.connection_id IN ({placeholders})
+                ORDER BY ce.connection_id, e.full_name
+            """, connection_ids)
+            
+            for emp_row in cursor.fetchall():
+                employees_map.setdefault(emp_row['connection_id'], []).append(emp_row['full_name'])
+        
+        connections = []
         total_fiber = 0.0
         total_twisted = 0.0
         
-        for row in cursor.fetchall():
+        for row in rows:
             conn_dict = dict(row)
-            emp_count = conn_dict['employee_count']
+            emp_count = max(conn_dict['employee_count'], 1)
             
-            # Рассчитываем долю для сотрудника
             conn_dict['employee_fiber_meters'] = round(conn_dict['fiber_meters'] / emp_count, 2)
             conn_dict['employee_twisted_pair_meters'] = round(conn_dict['twisted_pair_meters'] / emp_count, 2)
-            
-            # Получаем список всех исполнителей для этого подключения
-            cursor.execute("""
-                SELECT e.full_name
-                FROM employees e
-                JOIN connection_employees ce ON e.id = ce.employee_id
-                WHERE ce.connection_id = ?
-                ORDER BY e.full_name
-            """, (conn_dict['id'],))
-            conn_dict['all_employees'] = [row['full_name'] for row in cursor.fetchall()]
+            conn_dict['all_employees'] = employees_map.get(conn_dict['id'], [])
             
             connections.append(conn_dict)
             total_fiber += conn_dict['employee_fiber_meters']

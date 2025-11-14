@@ -143,7 +143,6 @@ class ConnectionRepository(BaseRepository):
             conn = self.get_connection()
             cursor = conn.cursor()
             
-            # Формируем условие по дате
             date_condition = ""
             params = [employee_id]
             if start_date and end_date:
@@ -158,7 +157,6 @@ class ConnectionRepository(BaseRepository):
                 date_condition = "AND c.created_at >= ?"
                 params.append(date_limit.strftime("%Y-%m-%d %H:%M:%S"))
             
-            # Получаем подключения с участием сотрудника
             query = f"""
                 SELECT 
                     c.id,
@@ -169,42 +167,48 @@ class ConnectionRepository(BaseRepository):
                     c.fiber_meters,
                     c.twisted_pair_meters,
                     c.created_at,
-                    COUNT(DISTINCT ce.employee_id) as employee_count
+                    COUNT(DISTINCT ce_all.employee_id) as employee_count
                 FROM connections c
-                JOIN connection_employees ce ON c.id = ce.connection_id
-                WHERE ce.connection_id IN (
-                    SELECT connection_id 
-                    FROM connection_employees 
-                    WHERE employee_id = ?
-                )
+                JOIN connection_employees ce_target 
+                    ON ce_target.connection_id = c.id AND ce_target.employee_id = ?
+                JOIN connection_employees ce_all 
+                    ON ce_all.connection_id = c.id
+                WHERE 1=1
                 {date_condition}
                 GROUP BY c.id
                 ORDER BY c.created_at DESC
             """
             
             cursor.execute(query, params)
-            connections = []
+            rows = cursor.fetchall()
             
+            connection_ids = [row['id'] for row in rows]
+            employees_map: Dict[int, List[str]] = {}
+            
+            if connection_ids:
+                placeholders = ",".join("?" for _ in connection_ids)
+                cursor.execute(f"""
+                    SELECT ce.connection_id, e.full_name
+                    FROM connection_employees ce
+                    JOIN employees e ON e.id = ce.employee_id
+                    WHERE ce.connection_id IN ({placeholders})
+                    ORDER BY ce.connection_id, e.full_name
+                """, connection_ids)
+                
+                for emp_row in cursor.fetchall():
+                    employees_map.setdefault(emp_row['connection_id'], []).append(emp_row['full_name'])
+            
+            connections = []
             total_fiber = 0.0
             total_twisted = 0.0
             
-            for row in cursor.fetchall():
+            for row in rows:
                 conn_dict = dict(row)
-                emp_count = conn_dict['employee_count']
+                emp_count = max(conn_dict['employee_count'], 1)
                 
-                # Рассчитываем долю для сотрудника
                 conn_dict['employee_fiber_meters'] = round(conn_dict['fiber_meters'] / emp_count, 2)
                 conn_dict['employee_twisted_pair_meters'] = round(conn_dict['twisted_pair_meters'] / emp_count, 2)
-                
-                # Получаем список всех исполнителей для этого подключения
-                cursor.execute("""
-                    SELECT e.full_name
-                    FROM employees e
-                    JOIN connection_employees ce ON e.id = ce.employee_id
-                    WHERE ce.connection_id = ?
-                    ORDER BY e.full_name
-                """, (conn_dict['id'],))
-                conn_dict['all_employees'] = [row['full_name'] for row in cursor.fetchall()]
+                conn_dict['all_employees'] = employees_map.get(conn_dict['id'], [])
                 
                 connections.append(conn_dict)
                 total_fiber += conn_dict['employee_fiber_meters']

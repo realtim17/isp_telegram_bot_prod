@@ -16,11 +16,6 @@ from telegram.ext import (
 # Импорт конфигурации
 from config import (
     TELEGRAM_BOT_TOKEN,
-    MANAGE_ACTION, ADD_EMPLOYEE_NAME, CONFIRM_ADD_EMPLOYEE, DELETE_EMPLOYEE_SELECT, CONFIRM_DELETE_EMPLOYEE,
-    SELECT_EMPLOYEE_FOR_MATERIAL, SELECT_MATERIAL_ACTION,
-    ENTER_FIBER_AMOUNT, ENTER_TWISTED_AMOUNT, CONFIRM_MATERIAL_OPERATION,
-    SELECT_EMPLOYEE_FOR_ROUTER, SELECT_ROUTER_ACTION,
-    ENTER_ROUTER_NAME, ENTER_ROUTER_QUANTITY, CONFIRM_ROUTER_OPERATION,
     SELECT_REPORT_EMPLOYEE, SELECT_REPORT_PERIOD,
     ENTER_REPORT_CUSTOM_START, ENTER_REPORT_CUSTOM_END,
     logger
@@ -41,7 +36,10 @@ from handlers.commands import (
 from utils.keyboards import get_main_keyboard
 
 # Импорт ConversationHandler для подключений
-from handlers.connection import connection_conv
+from handlers.connection import build_connection_conversation
+
+# Импорт EmployeeFlow
+from handlers.employees import EmployeeFlow
 
 # Импорт обработчиков отчетов
 from handlers.reports import (
@@ -52,25 +50,10 @@ from handlers.reports import (
     report_enter_custom_end
 )
 
-# Импорт обработчиков сотрудников
-from handlers.employees import (
-    manage_employees_start,
-    manage_action,
-    add_employee_name,
-    delete_employee_confirm,
-    select_employee_for_material,
-    select_material_action,
-    enter_fiber_amount,
-    enter_twisted_amount,
-    select_employee_for_router,
-    select_router_action,
-    enter_router_name,
-    enter_router_quantity,
-    show_employees_list
-)
-
 # Инициализация БД
 db = Database()
+connection_conv = build_connection_conversation(db)
+employee_flow = EmployeeFlow(db)
 
 
 def main():
@@ -105,39 +88,6 @@ def main():
     async def report_custom_end_wrapper(update, context):
         return await report_enter_custom_end(update, context, db)
     
-    async def manage_action_wrapper(update, context):
-        return await manage_action(update, context, db)
-    
-    async def add_employee_name_wrapper(update, context):
-        return await add_employee_name(update, context, db)
-    
-    async def delete_employee_confirm_wrapper(update, context):
-        return await delete_employee_confirm(update, context, db)
-    
-    async def select_employee_for_material_wrapper(update, context):
-        return await select_employee_for_material(update, context, db)
-    
-    async def select_material_action_wrapper(update, context):
-        return await select_material_action(update, context, db)
-    
-    async def enter_fiber_amount_wrapper(update, context):
-        return await enter_fiber_amount(update, context, db)
-    
-    async def enter_twisted_amount_wrapper(update, context):
-        return await enter_twisted_amount(update, context, db)
-    
-    async def select_employee_for_router_wrapper(update, context):
-        return await select_employee_for_router(update, context, db)
-    
-    async def select_router_action_wrapper(update, context):
-        return await select_router_action(update, context, db)
-    
-    async def enter_router_name_wrapper(update, context):
-        return await enter_router_name(update, context, db)
-    
-    async def enter_router_quantity_wrapper(update, context):
-        return await enter_router_quantity(update, context, db)
-    
     # Обработчик отчетов
     report_conv = ConversationHandler(
         entry_points=[
@@ -156,31 +106,8 @@ def main():
         ]
     )
     
-    # Обработчик управления сотрудниками
-    manage_conv = ConversationHandler(
-        entry_points=[
-            CommandHandler('manage_employees', manage_employees_start),
-            MessageHandler(filters.Regex('^👥 Управление сотрудниками$'), manage_employees_start)
-        ],
-        states={
-            MANAGE_ACTION: [CallbackQueryHandler(manage_action_wrapper, pattern='^(manage_|back_to_manage)')],
-            ADD_EMPLOYEE_NAME: [MessageHandler(text_input_filter, add_employee_name_wrapper)],
-            DELETE_EMPLOYEE_SELECT: [CallbackQueryHandler(delete_employee_confirm_wrapper, pattern='^(del_emp_|delete_cancel)')],
-            SELECT_EMPLOYEE_FOR_MATERIAL: [CallbackQueryHandler(select_employee_for_material_wrapper, pattern='^(mat_emp_|back_to_manage)')],
-            SELECT_MATERIAL_ACTION: [CallbackQueryHandler(select_material_action_wrapper, pattern='^(mat_action_|mat_back_to_list)')],
-            ENTER_FIBER_AMOUNT: [MessageHandler(text_input_filter, enter_fiber_amount_wrapper)],
-            ENTER_TWISTED_AMOUNT: [MessageHandler(text_input_filter, enter_twisted_amount_wrapper)],
-            SELECT_EMPLOYEE_FOR_ROUTER: [CallbackQueryHandler(select_employee_for_router_wrapper, pattern='^(rtr_emp_|back_to_manage)')],
-            SELECT_ROUTER_ACTION: [
-                CallbackQueryHandler(select_router_action_wrapper, pattern='^(rtr_action_|rtr_back_to_list)'),
-                CallbackQueryHandler(enter_router_name_wrapper, pattern='^(deduct_router_|router_model_)')
-            ],
-            ENTER_ROUTER_NAME: [
-                CallbackQueryHandler(enter_router_name_wrapper, pattern='^router_model_'),
-                MessageHandler(text_input_filter, enter_router_name_wrapper)
-            ],
-            ENTER_ROUTER_QUANTITY: [MessageHandler(text_input_filter, enter_router_quantity_wrapper)]
-        },
+    employee_conv = employee_flow.build_conversation(
+        text_input_filter,
         fallbacks=[
             CommandHandler('cancel', cancel_command),
             MessageHandler(menu_buttons_filter, cancel_and_start_new)
@@ -196,8 +123,8 @@ def main():
     application.add_handler(CommandHandler('help', help_command))
     application.add_handler(connection_conv)
     application.add_handler(report_conv)
-    application.add_handler(manage_conv)
-    application.add_handler(MessageHandler(filters.Regex('^👤 Список сотрудников$'), show_employees_list_wrapper))
+    application.add_handler(employee_conv)
+    application.add_handler(MessageHandler(filters.Regex('^📋 Список сотрудников МОЛ$'), employee_flow.show_employees_list))
     application.add_handler(MessageHandler(filters.Regex('^ℹ️ Помощь$'), help_command))
     
     # Fallback для неизвестных команд

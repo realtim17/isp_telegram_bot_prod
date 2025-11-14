@@ -1,5 +1,5 @@
 """
-Обработчики управления роутерами сотрудников
+Обработчики управления роутерами сотрудников (модульная версия)
 """
 from __future__ import annotations
 
@@ -11,6 +11,7 @@ from config import (
     SELECT_ROUTER_ACTION,
     ENTER_ROUTER_NAME,
     ENTER_ROUTER_QUANTITY,
+    CONFIRM_ROUTER_OPERATION,
 )
 from utils.keyboards import get_main_keyboard
 
@@ -32,6 +33,11 @@ async def select_employee_for_router(
 
     employee = flow.db.get_employee_by_id(emp_id)
     routers = flow.db.get_employee_routers(emp_id)
+
+    if not employee:
+        await query.edit_message_text("❌ Сотрудник не найден.")
+        await query.message.reply_text("Выберите действие:", reply_markup=get_main_keyboard())
+        return ConversationHandler.END
 
     router_text = ""
     if routers:
@@ -58,7 +64,7 @@ async def select_employee_for_router(
 
 
 async def select_router_action(flow: "EmployeeFlow", update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Обработка выбора действия с роутером"""
+    """Выбор операции над роутером"""
     query = update.callback_query
     await query.answer()
 
@@ -132,7 +138,7 @@ async def select_router_action(flow: "EmployeeFlow", update: Update, context: Co
 
 
 async def enter_router_name(flow: "EmployeeFlow", update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Получение модели роутера или списание"""
+    """Получение модели роутера или переход к списанию"""
     if update.callback_query:
         query = update.callback_query
         await query.answer()
@@ -164,29 +170,20 @@ async def enter_router_name(flow: "EmployeeFlow", update: Update, context: Conte
             context.user_data.clear()
             return ConversationHandler.END
 
-        success = flow.db.deduct_router_from_employee(emp_id, selected_router["router_name"], 1)
-        employee = flow.db.get_employee_by_id(emp_id)
+        context.user_data["router_name"] = selected_router["router_name"]
+        context.user_data["router_action"] = "deduct"
 
-        if success:
-            new_quantity = flow.db.get_router_quantity(emp_id, selected_router["router_name"])
-            await query.edit_message_text(
-                "✅ <b>Роутер списан!</b>\n\n"
-                f"👤 Сотрудник: {employee['full_name']}\n"
-                f"📡 Роутер: {selected_router['router_name']}\n"
-                "➖ Списано: 1 шт.\n"
-                f"📊 Осталось: {new_quantity} шт.",
-                parse_mode="HTML",
-            )
-        else:
-            await query.edit_message_text("❌ Ошибка при списании роутера.", parse_mode="HTML")
-
-        await query.message.reply_text("Выберите действие:", reply_markup=get_main_keyboard())
-        context.user_data.clear()
-        return ConversationHandler.END
+        await query.edit_message_text(
+            "➖ <b>Списание роутера</b>\n\n"
+            f"📡 Роутер: {selected_router['router_name']}\n"
+            f"📊 Доступно: {selected_router['quantity']} шт.\n\n"
+            "Введите количество для списания (целое число):",
+            parse_mode="HTML",
+        )
+        return ENTER_ROUTER_QUANTITY
 
     router_name = update.message.text.strip()
     context.user_data["router_name"] = router_name
-
     await update.message.reply_text(
         f"✅ Роутер: {router_name}\n\nВведите количество (целое число):",
         parse_mode="HTML",
@@ -195,7 +192,7 @@ async def enter_router_name(flow: "EmployeeFlow", update: Update, context: Conte
 
 
 async def enter_router_quantity(flow: "EmployeeFlow", update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Добавление количества роутеров"""
+    """Получение количества роутеров и запрос подтверждения"""
     try:
         quantity = int(update.message.text.strip())
         if quantity <= 0:
@@ -206,31 +203,105 @@ async def enter_router_quantity(flow: "EmployeeFlow", update: Update, context: C
         )
         return ENTER_ROUTER_QUANTITY
 
+    context.user_data["router_quantity"] = quantity
     emp_id = context.user_data.get("selected_employee_id")
     router_name = context.user_data.get("router_name")
     action = context.user_data.get("router_action")
+    employee = flow.db.get_employee_by_id(emp_id)
+    symbol = "+" if action == "add" else "-"
 
+    keyboard = InlineKeyboardMarkup(
+        [
+            [InlineKeyboardButton("✅ Подтвердить", callback_data="router_confirm")],
+            [InlineKeyboardButton("✏️ Изменить", callback_data="router_edit")],
+            [InlineKeyboardButton("❌ Отмена", callback_data="router_cancel")],
+        ]
+    )
+
+    await update.message.reply_text(
+        f"👤 Сотрудник: <b>{employee['full_name']}</b>\n"
+        f"📡 Роутер: {router_name}\n"
+        f"Количество: {symbol}{quantity} шт.\n\n"
+        "Подтвердить операцию?",
+        parse_mode="HTML",
+        reply_markup=keyboard,
+    )
+    return CONFIRM_ROUTER_OPERATION
+
+
+async def confirm_router_operation(
+    flow: "EmployeeFlow", update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> int:
+    """Подтверждение операций с роутерами"""
+    query = update.callback_query
+    await query.answer()
+
+    data = query.data
+    if data == "router_cancel":
+        context.user_data.clear()
+        await query.edit_message_text("❌ Операция с роутерами отменена.")
+        await query.message.reply_text("Выберите действие:", reply_markup=get_main_keyboard())
+        return ConversationHandler.END
+
+    if data == "router_edit":
+        await query.edit_message_text(
+            "✏️ Введите количество роутеров заново:",
+            parse_mode="HTML",
+        )
+        context.user_data.pop("router_quantity", None)
+        return ENTER_ROUTER_QUANTITY
+
+    if data != "router_confirm":
+        return CONFIRM_ROUTER_OPERATION
+
+    emp_id = context.user_data.get("selected_employee_id")
+    router_name = context.user_data.get("router_name")
+    quantity = context.user_data.get("router_quantity", 0)
+    action = context.user_data.get("router_action")
     employee = flow.db.get_employee_by_id(emp_id)
 
+    if not employee:
+        await query.edit_message_text("❌ Сотрудник не найден.")
+        context.user_data.clear()
+        await query.message.reply_text("Выберите действие:", reply_markup=get_main_keyboard())
+        return ConversationHandler.END
+
+    created_by = query.from_user.id if query and query.from_user else None
+
     if action == "add":
-        success = flow.db.add_router_to_employee(emp_id, router_name, quantity)
+        success = flow.db.add_router_to_employee(emp_id, router_name, quantity, created_by=created_by)
         if success:
             new_quantity = flow.db.get_router_quantity(emp_id, router_name)
-            await update.message.reply_text(
+            await query.edit_message_text(
                 "✅ <b>Роутеры добавлены!</b>\n\n"
                 f"👤 Сотрудник: {employee['full_name']}\n"
                 f"📡 Роутер: {router_name}\n"
                 f"➕ Добавлено: {quantity} шт.\n"
                 f"📊 Всего: {new_quantity} шт.",
                 parse_mode="HTML",
-                reply_markup=get_main_keyboard(),
             )
         else:
-            await update.message.reply_text(
-                "❌ Ошибка при добавлении роутеров.", reply_markup=get_main_keyboard()
+            await query.edit_message_text("❌ Ошибка при добавлении роутеров.")
+    else:
+        success = flow.db.deduct_router_from_employee(
+            emp_id, router_name, quantity, connection_id=None, created_by=created_by
+        )
+        if success:
+            new_quantity = flow.db.get_router_quantity(emp_id, router_name)
+            await query.edit_message_text(
+                "✅ <b>Роутеры списаны!</b>\n\n"
+                f"👤 Сотрудник: {employee['full_name']}\n"
+                f"📡 Роутер: {router_name}\n"
+                f"➖ Списано: {quantity} шт.\n"
+                f"📊 Осталось: {new_quantity} шт.",
+                parse_mode="HTML",
+            )
+        else:
+            await query.edit_message_text(
+                "❌ Ошибка при списании роутеров (недостаточно в наличии).",
+                parse_mode="HTML",
             )
 
     context.user_data.clear()
+    await query.message.reply_text("Выберите действие:", reply_markup=get_main_keyboard())
     return ConversationHandler.END
-
-

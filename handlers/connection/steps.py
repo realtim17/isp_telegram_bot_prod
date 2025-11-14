@@ -1,7 +1,7 @@
 """
 Обработчики шагов создания подключения
 """
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
+from telegram import Update, InlineKeyboardButton, ReplyKeyboardRemove
 from telegram.ext import ContextTypes, ConversationHandler
 
 from config import (
@@ -12,7 +12,14 @@ from config import (
 from utils.keyboards import get_main_keyboard
 from handlers.connection.constants import MAX_PHOTOS, PHOTO_REQUIREMENTS
 from handlers.connection.cancellation import cancel_connection
-from database import Database
+from utils.helpers import run_in_thread
+from handlers.connection.ui import (
+    build_inline_keyboard,
+    cancel_reply_keyboard,
+    build_reply_keyboard,
+    SKIP_TEXT,
+    CANCEL_TEXT
+)
 
 
 async def new_connection_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -22,13 +29,11 @@ async def new_connection_start(update: Update, context: ContextTypes.DEFAULT_TYP
     context.user_data['connection_data'] = {}
     
     # Создаем клавиатуру для выбора типа подключения
-    keyboard = [
+    reply_markup = build_inline_keyboard([
         [InlineKeyboardButton("1️⃣ МКД", callback_data='conn_type_mkd')],
         [InlineKeyboardButton("2️⃣ ЧС", callback_data='conn_type_chs')],
-        [InlineKeyboardButton("3️⃣ Юр / Гос", callback_data='conn_type_legal')],
-        [InlineKeyboardButton("❌ Отмена", callback_data='cancel_connection')]
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
+        [InlineKeyboardButton("3️⃣ Юр / Гос", callback_data='conn_type_legal')]
+    ])
     
     text = """
 🏢 <b>Шаг 1/12: Тип подключения</b>
@@ -75,11 +80,9 @@ async def select_connection_type(update: Update, context: ContextTypes.DEFAULT_T
 ⚠️ <b>Внимание:</b> Загрузка фотографий обязательна!
 """
     
-    keyboard = [
-        [InlineKeyboardButton("➡️ Продолжить", callback_data='continue_from_photos')],
-        [InlineKeyboardButton("❌ Отмена", callback_data='cancel_connection')]
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
+    reply_markup = build_inline_keyboard([
+        [InlineKeyboardButton("➡️ Продолжить", callback_data='continue_from_photos')]
+    ])
     
     await query.edit_message_text(text, reply_markup=reply_markup, parse_mode='HTML')
     
@@ -100,11 +103,9 @@ async def upload_photos(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         photos.append(photo_file_id)
         context.user_data['photos'] = photos
         
-        keyboard = [
-            [InlineKeyboardButton("➡️ Продолжить", callback_data='continue_from_photos')],
-            [InlineKeyboardButton("❌ Отмена", callback_data='cancel_connection')]
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
+        reply_markup = build_inline_keyboard([
+            [InlineKeyboardButton("➡️ Продолжить", callback_data='continue_from_photos')]
+        ])
         
         # Если это первое фото - отправляем новое сообщение и сохраняем его ID
         if len(photos) == 1:
@@ -155,8 +156,7 @@ async def ask_address(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
         return UPLOAD_PHOTOS
     
     # Создаём клавиатуру с кнопкой отмены
-    keyboard = [[KeyboardButton("❌ Отмена")]]
-    reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=False)
+    reply_markup = cancel_reply_keyboard()
     
     await query.edit_message_text(
         f"✅ Загружено фото: {photos_count}\n\n"
@@ -174,12 +174,12 @@ async def ask_address(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
     return ENTER_ADDRESS
 
 
-async def enter_address(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+async def enter_address(update: Update, context: ContextTypes.DEFAULT_TYPE, db) -> int:
     """Сохранение адреса и переход к выбору роутера"""
     address = update.message.text.strip()
     
     # Проверяем отмену
-    if address == "❌ Отмена":
+    if address == CANCEL_TEXT:
         context.user_data.clear()
         await update.message.reply_text(
             "❌ <b>Создание подключения отменено</b>\n\n"
@@ -196,8 +196,7 @@ async def enter_address(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     context.user_data['connection_data']['address'] = address
     
     # Получаем список роутеров из БД
-    db = Database()
-    router_names = db.get_all_router_names()
+    router_names = await run_in_thread(db.get_all_router_names) or []
     
     # Создаём клавиатуру с роутерами
     keyboard = []
@@ -211,10 +210,15 @@ async def enter_address(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     
     # Добавляем кнопку "Пропустить"
     keyboard.append([InlineKeyboardButton("⏭️ Пропустить", callback_data='router_skip')])
-    keyboard.append([InlineKeyboardButton("❌ Отмена", callback_data='cancel_connection')])
-    reply_markup = InlineKeyboardMarkup(keyboard)
+    reply_markup = build_inline_keyboard(keyboard)
     
-    # Убираем клавиатуру отмены и показываем inline-клавиатуру
+    # Убираем reply-клавиатуру
+    await update.message.reply_text(
+        "✅ Адрес сохранен.",
+        reply_markup=ReplyKeyboardRemove()
+    )
+
+    # Показываем inline-клавиатуру
     if router_names:
         message_text = f"✅ Адрес: {address}\n\n🌐 <b>Шаг 4/12: Модель роутера</b>\n\nВыберите роутер из списка или пропустите:"
     else:
@@ -243,12 +247,10 @@ async def select_router(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         context.user_data['connection_data']['router_quantity'] = 0
         
         # Сразу переходим к шагу "Доступ на роутер"
-        keyboard = [
+        reply_markup = build_inline_keyboard([
             [InlineKeyboardButton("✅ Подтвердить", callback_data='router_access_confirmed')],
-            [InlineKeyboardButton("⏭️ Пропустить", callback_data='router_access_skipped')],
-            [InlineKeyboardButton("❌ Отмена", callback_data='cancel_connection')]
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
+            [InlineKeyboardButton("⏭️ Пропустить", callback_data='router_access_skipped')]
+        ])
         
         await query.edit_message_text(
             f"⏭️ Роутер: пропущено\n\n"
@@ -269,8 +271,7 @@ async def select_router(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     context.user_data['connection_data']['router_model'] = router_name
     
     # Добавляем клавиатуру отмены для ввода количества роутеров
-    keyboard = [[KeyboardButton("❌ Отмена")]]
-    reply_markup_kb = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=False)
+    reply_markup_kb = cancel_reply_keyboard(add_cancel=False)
     
     await query.edit_message_text(
         f"✅ Роутер: {router_name}\n\n"
@@ -292,7 +293,7 @@ async def enter_router_quantity_connection(update: Update, context: ContextTypes
     text = update.message.text.strip()
     
     # Проверяем отмену
-    if text == "❌ Отмена":
+    if text == CANCEL_TEXT:
         context.user_data.clear()
         await update.message.reply_text(
             "❌ <b>Создание подключения отменено</b>\n\n"
@@ -313,12 +314,15 @@ async def enter_router_quantity_connection(update: Update, context: ContextTypes
         context.user_data['connection_data']['router_quantity'] = router_quantity
         
         # Переход к новому шагу "Доступ на роутер"
-        keyboard = [
+        reply_markup = build_inline_keyboard([
             [InlineKeyboardButton("✅ Подтвердить", callback_data='router_access_confirmed')],
-            [InlineKeyboardButton("⏭️ Пропустить", callback_data='router_access_skipped')],
-            [InlineKeyboardButton("❌ Отмена", callback_data='cancel_connection')]
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
+            [InlineKeyboardButton("⏭️ Пропустить", callback_data='router_access_skipped')]
+        ])
+
+        await update.message.reply_text(
+            "✅ Количество принято.",
+            reply_markup=ReplyKeyboardRemove()
+        )
         
         await update.message.reply_text(
             f"✅ Количество роутеров: {router_quantity}\n\n"
@@ -360,13 +364,6 @@ async def router_access_handler(update: Update, context: ContextTypes.DEFAULT_TY
         context.user_data['connection_data']['router_access'] = False
         status_text = "⏭️ Пропущено"
     
-    # Создаём inline клавиатуру с кнопкой "Пропустить" для порта
-    keyboard = [
-        [InlineKeyboardButton("⏭️ Пропустить", callback_data='port_skip')],
-        [InlineKeyboardButton("❌ Отмена", callback_data='cancel_connection')]
-    ]
-    reply_markup_inline = InlineKeyboardMarkup(keyboard)
-    
     await query.edit_message_text(
         f"{status_text}\n\n"
         f"🔌 <b>Шаг 7/12: Номер порта</b>\n\n"
@@ -375,16 +372,26 @@ async def router_access_handler(update: Update, context: ContextTypes.DEFAULT_TY
     )
     
     await query.message.reply_text(
-        "Введите номер порта текстом или используйте кнопки ниже:",
-        reply_markup=reply_markup_inline
+        "Введите номер порта текстом или воспользуйтесь кнопками ниже:",
+        reply_markup=build_reply_keyboard([[SKIP_TEXT]])
     )
     
     return ENTER_PORT
 
 
+async def _prompt_fiber_input(message, status_text: str):
+    """Вывести подсказку для ввода метража ВОЛС"""
+    await message.reply_text(
+        f"{status_text}\n\n"
+        f"📏 <b>Шаг 8/12: Метраж ВОЛС</b>\n\n"
+        f"Введите количество метров ВОЛС (волоконно-оптической линии связи):",
+        reply_markup=cancel_reply_keyboard(),
+        parse_mode='HTML'
+    )
+
+
 async def enter_port(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Сохранение порта и запрос метража ВОЛС"""
-    # Обработка callback (кнопка "Пропустить")
     if update.callback_query:
         query = update.callback_query
         await query.answer()
@@ -395,32 +402,14 @@ async def enter_port(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         if query.data == 'port_skip':
             if 'connection_data' not in context.user_data:
                 context.user_data['connection_data'] = {}
-            
             context.user_data['connection_data']['port'] = '-'
-            
-            # Добавляем клавиатуру отмены для ввода ВОЛС
-            keyboard = [[KeyboardButton("❌ Отмена")]]
-            reply_markup_kb = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=False)
-            
-            await query.edit_message_text(
-                f"⏭️ Порт: пропущено\n\n"
-                f"📏 <b>Шаг 8/12: Метраж ВОЛС</b>\n\n"
-                f"Введите количество метров ВОЛС (волоконно-оптической линии связи):",
-                parse_mode='HTML'
-            )
-            
-            await query.message.reply_text(
-                "Для отмены нажмите кнопку ниже:",
-                reply_markup=reply_markup_kb
-            )
-            
+            await _prompt_fiber_input(query.message, "⏭️ Порт: пропущено")
             return ENTER_FIBER
+        return ENTER_PORT
     
-    # Обработка текстового ввода
-    port = update.message.text.strip()
+    port = (update.message.text or "").strip()
     
-    # Проверяем отмену
-    if port == "❌ Отмена":
+    if port == CANCEL_TEXT:
         context.user_data.clear()
         await update.message.reply_text(
             "❌ <b>Создание подключения отменено</b>\n\n"
@@ -430,23 +419,19 @@ async def enter_port(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         )
         return ConversationHandler.END
     
+    if port == SKIP_TEXT:
+        if 'connection_data' not in context.user_data:
+            context.user_data['connection_data'] = {}
+        context.user_data['connection_data']['port'] = '-'
+        await _prompt_fiber_input(update.message, "⏭️ Порт: пропущено")
+        return ENTER_FIBER
+    
     if 'connection_data' not in context.user_data:
         context.user_data['connection_data'] = {}
     
     context.user_data['connection_data']['port'] = port
     
-    # Добавляем клавиатуру отмены для ввода ВОЛС
-    keyboard = [[KeyboardButton("❌ Отмена")]]
-    reply_markup_kb = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=False)
-    
-    await update.message.reply_text(
-        f"✅ Порт: {port}\n\n"
-        f"📏 <b>Шаг 8/12: Метраж ВОЛС</b>\n\n"
-        f"Введите количество метров ВОЛС (волоконно-оптической линии связи):",
-        reply_markup=reply_markup_kb,
-        parse_mode='HTML'
-    )
-    
+    await _prompt_fiber_input(update.message, f"✅ Порт: {port}")
     return ENTER_FIBER
 
 
@@ -455,7 +440,7 @@ async def enter_fiber(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
     text = update.message.text.strip()
     
     # Проверяем отмену
-    if text == "❌ Отмена":
+    if text == CANCEL_TEXT:
         context.user_data.clear()
         await update.message.reply_text(
             "❌ <b>Создание подключения отменено</b>\n\n"
@@ -495,7 +480,7 @@ async def enter_twisted(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     text = update.message.text.strip()
     
     # Проверяем отмену
-    if text == "❌ Отмена":
+    if text == CANCEL_TEXT:
         context.user_data.clear()
         await update.message.reply_text(
             "❌ <b>Создание подключения отменено</b>\n\n"
@@ -516,11 +501,9 @@ async def enter_twisted(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         context.user_data['connection_data']['twisted_pair_meters'] = twisted_meters
         
         # Переходим к подтверждению договора
-        keyboard = [
-            [InlineKeyboardButton("✅ Подтверждаю", callback_data='contract_confirmed')],
-            [InlineKeyboardButton("❌ Отмена", callback_data='cancel_connection')]
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
+        reply_markup = build_inline_keyboard([
+            [InlineKeyboardButton("✅ Подтверждаю", callback_data='contract_confirmed')]
+        ])
         
         await update.message.reply_text(
             f"✅ Витая пара: {twisted_meters} м\n\n"
@@ -557,12 +540,10 @@ async def contract_signed(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     context.user_data['connection_data']['contract_signed'] = True
     
     # Переходим к новому шагу "Телеграмм Бот"
-    keyboard = [
+    reply_markup = build_inline_keyboard([
         [InlineKeyboardButton("✅ Подтвердить", callback_data='telegram_bot_confirmed')],
-        [InlineKeyboardButton("⏭️ Пропустить", callback_data='telegram_bot_skipped')],
-        [InlineKeyboardButton("❌ Отмена", callback_data='cancel_connection')]
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
+        [InlineKeyboardButton("⏭️ Пропустить", callback_data='telegram_bot_skipped')]
+    ])
     
     await query.edit_message_text(
         f"✅ Договор подписан\n\n"
@@ -575,7 +556,7 @@ async def contract_signed(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     return TELEGRAM_BOT_CONFIRM
 
 
-async def telegram_bot_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+async def telegram_bot_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE, db) -> int:
     """Обработка подтверждения подключения Телеграмм Бота"""
     query = update.callback_query
     await query.answer()
@@ -595,8 +576,7 @@ async def telegram_bot_confirm(update: Update, context: ContextTypes.DEFAULT_TYP
         status_text = "⏭️ Пропущено"
     
     # Получаем список сотрудников
-    db = Database()
-    employees = db.get_all_employees()
+    employees = await run_in_thread(db.get_all_employees) or []
     
     if not employees:
         await query.edit_message_text(
@@ -621,8 +601,7 @@ async def telegram_bot_confirm(update: Update, context: ContextTypes.DEFAULT_TYP
         )])
     
     keyboard.append([InlineKeyboardButton("✅ Готово", callback_data='employees_done')])
-    keyboard.append([InlineKeyboardButton("❌ Отмена", callback_data='cancel_connection')])
-    reply_markup = InlineKeyboardMarkup(keyboard)
+    reply_markup = build_inline_keyboard(keyboard)
     
     await query.edit_message_text(
         f"{status_text}\n\n"
@@ -639,4 +618,3 @@ async def telegram_bot_confirm(update: Update, context: ContextTypes.DEFAULT_TYP
     )
     
     return SELECT_EMPLOYEES
-

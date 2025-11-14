@@ -1,15 +1,23 @@
 """
 Вспомогательные функции
 """
-from typing import Dict, List
+from typing import Dict, List, Any
 from datetime import datetime
 import logging
+import asyncio
+from functools import partial
 
 from telegram import InputMediaPhoto
 
 from config import REPORTS_CHANNEL_ID, CONNECTION_TYPES
 
 logger = logging.getLogger(__name__)
+
+
+async def run_in_thread(func, *args, **kwargs) -> Any:
+    """Выполнить блокирующую функцию в отдельном потоке"""
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(None, partial(func, *args, **kwargs))
 
 
 def _create_media_group(photos: List[str], caption: str) -> List[InputMediaPhoto]:
@@ -91,7 +99,7 @@ async def send_connection_report(message, connection_id: int, data: Dict, photos
     """Отправить красиво отформатированный отчет о подключении с фотографиями"""
     try:
         # Получаем имена сотрудников
-        employees = db.get_all_employees()
+        employees = (await run_in_thread(db.get_all_employees)) or []
         employee_names = [emp['full_name'] for emp in employees if emp['id'] in employee_ids]
         
         # Формируем текст отчета
@@ -126,4 +134,3 @@ async def send_connection_report(message, connection_id: int, data: Dict, photos
             "⚠️ Отчет создан, но возникла ошибка при отправке фотографий.",
             parse_mode='HTML'
         )
-

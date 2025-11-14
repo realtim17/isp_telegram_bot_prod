@@ -20,7 +20,6 @@ from report_generator import ReportGenerator
 logger = logging.getLogger(__name__)
 
 DATE_INPUT_FORMAT = "%d.%m.%Y"
-ALL_TIME_START = datetime(2020, 1, 1)
 
 
 def _parse_date_input(text: str):
@@ -191,7 +190,6 @@ async def report_select_period(update: Update, context: ContextTypes.DEFAULT_TYP
     keyboard = [
         [InlineKeyboardButton("📅 Последняя неделя", callback_data='period_7')],
         [InlineKeyboardButton("📅 Последний месяц", callback_data='period_30')],
-        [InlineKeyboardButton("📅 Все время", callback_data='period_all')],
         [InlineKeyboardButton("📆 Выбрать диапазон", callback_data='period_custom')],
         [InlineKeyboardButton("❌ Отмена", callback_data='period_cancel')]
     ]
@@ -230,13 +228,12 @@ async def report_generate(update: Update, context: ContextTypes.DEFAULT_TYPE, db
     # Определяем период
     period_map = {
         'period_7': (7, 'Последняя неделя'),
-        'period_30': (30, 'Последний месяц'),
-        'period_all': (None, 'Все время')
+        'period_30': (30, 'Последний месяц')
     }
     
     days, period_name = period_map[query.data]
     end_date = datetime.now()
-    start_date = ALL_TIME_START if days is None else end_date - timedelta(days=days)
+    start_date = end_date - timedelta(days=days)
     
     return await _generate_report_for_period(
         update=update,
