@@ -1,6 +1,7 @@
 """
 Подтверждение данных и сохранение подключения
 """
+import asyncio
 from datetime import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, ConversationHandler
@@ -18,9 +19,20 @@ async def show_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE, 
     photos = context.user_data.get('photos', [])
     selected_employees = context.user_data.get('selected_employees', [])
     
-    # Получаем имена выбранных сотрудников
-    employees = await run_in_thread(db.get_all_employees) or []
-    employee_names = [emp['full_name'] for emp in employees if emp['id'] in selected_employees]
+    # Получаем подробности по выбранным сотрудникам (параллельно)
+    employee_rows = []
+    if selected_employees:
+        employee_rows = await asyncio.gather(
+            *(run_in_thread(db.get_employee_by_id, emp_id) for emp_id in selected_employees)
+        )
+    employee_map = {
+        emp_id: emp for emp_id, emp in zip(selected_employees, employee_rows) if emp
+    }
+    employee_names = [
+        employee_map[emp_id]['full_name']
+        for emp_id in selected_employees
+        if emp_id in employee_map
+    ]
     
     # Получаем читаемое название типа подключения
     conn_type = data.get('connection_type', 'mkd')
@@ -28,8 +40,8 @@ async def show_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE, 
     
     # Рассчитываем долю на каждого
     emp_count = len(selected_employees)
-    fiber_per_emp = round(data['fiber_meters'] / emp_count, 2)
-    twisted_per_emp = round(data['twisted_pair_meters'] / emp_count, 2)
+    fiber_per_emp = round(data['fiber_meters'] / max(emp_count, 1), 2)
+    twisted_per_emp = round(data['twisted_pair_meters'] / max(emp_count, 1), 2)
     
     # Получаем информацию о плательщиках
     material_payer_id = context.user_data.get('material_payer_id')
@@ -37,12 +49,20 @@ async def show_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE, 
     
     payer_info = ""
     if material_payer_id:
-        payer = await run_in_thread(db.get_employee_by_id, material_payer_id)
+        payer = employee_map.get(material_payer_id)
+        if not payer:
+            payer = await run_in_thread(db.get_employee_by_id, material_payer_id)
+            if payer:
+                employee_map[material_payer_id] = payer
         if payer:
             payer_info += f"\n\n💰 <b>Материалы списываются с:</b> {payer['full_name']}"
     
     if router_payer_id:
-        router_payer = await run_in_thread(db.get_employee_by_id, router_payer_id)
+        router_payer = employee_map.get(router_payer_id)
+        if not router_payer:
+            router_payer = await run_in_thread(db.get_employee_by_id, router_payer_id)
+            if router_payer:
+                employee_map[router_payer_id] = router_payer
         if router_payer:
             router_quantity = data.get('router_quantity', 1)
             quantity_text = f" ({router_quantity} шт.)" if router_quantity > 1 else ""

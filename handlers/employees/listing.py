@@ -7,17 +7,18 @@ from telegram import Update
 from telegram.ext import ContextTypes
 
 from utils.keyboards import get_main_keyboard
+from utils.helpers import run_in_thread
 
 
 async def show_employees_list(flow: "EmployeeFlow", update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Выводит список сотрудников с материалами и роутерами"""
-    employees = flow.db.get_all_employees()
+    employees = await run_in_thread(flow.db.get_all_employees)
 
     included = []
     for emp in employees:
         fiber_balance = emp.get("fiber_balance", 0) or 0
         twisted_balance = emp.get("twisted_pair_balance", 0) or 0
-        routers = flow.db.get_employee_routers(emp["id"])
+        routers = await run_in_thread(flow.db.get_employee_routers, emp["id"])
         router_count = sum(r["quantity"] for r in routers)
         if fiber_balance > 0 or twisted_balance > 0 or router_count > 0:
             included.append((emp, fiber_balance, twisted_balance, routers, router_count))

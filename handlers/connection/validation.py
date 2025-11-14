@@ -1,6 +1,8 @@
 """
 Проверка наличия материалов и роутеров у исполнителей
 """
+import asyncio
+
 from telegram import Update, InlineKeyboardButton
 from telegram.ext import ContextTypes, ConversationHandler
 
@@ -19,11 +21,17 @@ async def check_materials_and_proceed(update: Update, context: ContextTypes.DEFA
     fiber_meters = data['fiber_meters']
     twisted_pair_meters = data['twisted_pair_meters']
     
-    # Получаем балансы всех выбранных сотрудников
+    # Получаем балансы всех выбранных сотрудников (параллельно)
     employees_with_balance = []
-    for emp_id in selected_employees:
-        emp = await run_in_thread(db.get_employee_by_id, emp_id)
-        if emp:
+    if selected_employees:
+        employee_tasks = [
+            run_in_thread(db.get_employee_by_id, emp_id)
+            for emp_id in selected_employees
+        ]
+        employee_rows = await asyncio.gather(*employee_tasks, return_exceptions=False)
+        for emp_id, emp in zip(selected_employees, employee_rows):
+            if not emp:
+                continue
             fiber_balance = emp.get('fiber_balance', 0) or 0
             twisted_balance = emp.get('twisted_pair_balance', 0) or 0
             has_enough = (fiber_balance >= fiber_meters and twisted_balance >= twisted_pair_meters)
@@ -119,19 +127,25 @@ async def check_routers_and_proceed(update: Update, context: ContextTypes.DEFAUL
         from handlers.connection.confirmation import show_confirmation
         return await show_confirmation(update, context, db)
     
-    # Получаем информацию о роутерах у сотрудников
-    employees_with_router = []
-    for emp_id in selected_employees:
-        emp = await run_in_thread(db.get_employee_by_id, emp_id)
-        if emp:
-            router_quantity = await run_in_thread(db.get_router_quantity, emp_id, router_model)
-            has_enough = router_quantity >= required_quantity
-            employees_with_router.append({
-                'id': emp_id,
-                'name': emp['full_name'],
-                'quantity': router_quantity,
-                'has_enough': has_enough
-            })
+    # Получаем информацию о роутерах у сотрудников (параллельно)
+    async def _fetch_router_info(emp_id: int):
+        emp_task = run_in_thread(db.get_employee_by_id, emp_id)
+        quantity_task = run_in_thread(db.get_router_quantity, emp_id, router_model)
+        emp, router_quantity = await asyncio.gather(emp_task, quantity_task)
+        if not emp:
+            return None
+        has_enough = router_quantity >= required_quantity
+        return {
+            'id': emp_id,
+            'name': emp['full_name'],
+            'quantity': router_quantity,
+            'has_enough': has_enough
+        }
+    
+    router_tasks = [_fetch_router_info(emp_id) for emp_id in selected_employees]
+    employees_with_router = [
+        info for info in await asyncio.gather(*router_tasks) if info
+    ] if router_tasks else []
     
     # Определяем, у кого есть достаточно роутеров
     employees_with_enough = [e for e in employees_with_router if e['has_enough']]

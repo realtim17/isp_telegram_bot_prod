@@ -1,6 +1,7 @@
 """
 Обработчики для формирования отчетов
 """
+import asyncio
 import os
 import logging
 from datetime import datetime, timedelta
@@ -15,6 +16,7 @@ from config import (
     ENTER_REPORT_CUSTOM_END
 )
 from utils.keyboards import get_main_keyboard
+from utils.helpers import run_in_thread
 from report_generator import ReportGenerator
 
 logger = logging.getLogger(__name__)
@@ -59,7 +61,7 @@ async def _generate_report_for_period(
         context.user_data.clear()
         return ConversationHandler.END
     
-    employee = db.get_employee_by_id(emp_id)
+    employee = await run_in_thread(db.get_employee_by_id, emp_id)
     if not employee:
         await message.reply_text(
             "❌ Не удалось найти информацию о сотруднике. Попробуйте еще раз.",
@@ -76,12 +78,19 @@ async def _generate_report_for_period(
         await target_message.reply_text("⏳ Формирую отчет, подождите...")
     
     try:
-        connections, stats = db.get_employee_report(
+        report_task = run_in_thread(
+            db.get_employee_report,
             emp_id,
             start_date=start_date,
             end_date=end_date
         )
-        movements = db.get_employee_movements(emp_id, start_date, end_date)
+        movements_task = run_in_thread(
+            db.get_employee_movements,
+            emp_id,
+            start_date,
+            end_date
+        )
+        (connections, stats), movements = await asyncio.gather(report_task, movements_task)
     except Exception as exc:
         logger.error(f"Ошибка при получении данных для отчета: {exc}")
         await target_message.reply_text(
@@ -101,7 +110,8 @@ async def _generate_report_for_period(
         return ConversationHandler.END
     
     try:
-        filename = ReportGenerator.generate_employee_report(
+        filename = await run_in_thread(
+            ReportGenerator.generate_employee_report,
             employee_name=employee['full_name'],
             connections=connections,
             stats=stats,
@@ -142,7 +152,7 @@ async def _generate_report_for_period(
 
 async def report_start(update: Update, context: ContextTypes.DEFAULT_TYPE, db) -> int:
     """Начало формирования отчета"""
-    employees = db.get_all_employees()
+    employees = await run_in_thread(db.get_all_employees) or []
     
     if not employees:
         text = "⚠️ В системе нет ни одного сотрудника!"
@@ -185,7 +195,15 @@ async def report_select_period(update: Update, context: ContextTypes.DEFAULT_TYP
     emp_id = int(query.data.split('_')[2])
     context.user_data['report_employee_id'] = emp_id
     
-    employee = db.get_employee_by_id(emp_id)
+    employee = await run_in_thread(db.get_employee_by_id, emp_id)
+    if not employee:
+        await query.edit_message_text(
+            "❌ Не удалось найти выбранного сотрудника. Попробуйте снова.",
+            parse_mode='HTML'
+        )
+        await query.message.reply_text("Выберите действие:", reply_markup=get_main_keyboard())
+        context.user_data.clear()
+        return ConversationHandler.END
     
     keyboard = [
         [InlineKeyboardButton("📅 Последняя неделя", callback_data='period_7')],

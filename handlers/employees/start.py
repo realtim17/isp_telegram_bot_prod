@@ -17,6 +17,7 @@ from config import (
     logger,
 )
 from utils.keyboards import get_main_keyboard
+from utils.helpers import run_in_thread
 
 
 async def manage_employees_start(flow: "EmployeeFlow", update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -76,7 +77,7 @@ async def manage_action(flow: "EmployeeFlow", update: Update, context: ContextTy
         return ADD_EMPLOYEE_NAME
 
     if data == "manage_delete":
-        employees = flow.db.get_all_employees()
+        employees = await run_in_thread(flow.db.get_all_employees)
         if not employees:
             await query.edit_message_text("⚠️ В системе нет сотрудников для удаления.")
             await query.message.reply_text("Выберите действие:", reply_markup=get_main_keyboard())
@@ -96,7 +97,7 @@ async def manage_action(flow: "EmployeeFlow", update: Update, context: ContextTy
         return DELETE_EMPLOYEE_SELECT
 
     if data == "manage_materials":
-        employees = flow.db.get_all_employees()
+        employees = await run_in_thread(flow.db.get_all_employees)
         if not employees:
             await query.edit_message_text("⚠️ В системе нет сотрудников.")
             await query.message.reply_text("Выберите действие:", reply_markup=get_main_keyboard())
@@ -124,7 +125,7 @@ async def manage_action(flow: "EmployeeFlow", update: Update, context: ContextTy
         return SELECT_EMPLOYEE_FOR_MATERIAL
 
     if data == "manage_routers":
-        employees = flow.db.get_all_employees()
+        employees = await run_in_thread(flow.db.get_all_employees)
         if not employees:
             await query.edit_message_text("⚠️ В системе нет сотрудников.")
             await query.message.reply_text("Выберите действие:", reply_markup=get_main_keyboard())
@@ -132,7 +133,7 @@ async def manage_action(flow: "EmployeeFlow", update: Update, context: ContextTy
 
         keyboard = []
         for emp in employees:
-            routers = flow.db.get_employee_routers(emp["id"])
+            routers = await run_in_thread(flow.db.get_employee_routers, emp["id"])
             router_count = sum(r["quantity"] for r in routers)
             router_text = f"{router_count} шт." if router_count > 0 else "нет"
             keyboard.append(
@@ -153,7 +154,7 @@ async def manage_action(flow: "EmployeeFlow", update: Update, context: ContextTy
         return SELECT_EMPLOYEE_FOR_ROUTER
 
     if data == "manage_list":
-        employees = flow.db.get_all_employees()
+        employees = await run_in_thread(flow.db.get_all_employees)
         if not employees:
             text = "👤 <b>Список всех сотрудников</b>\n\nСписок пуст."
         else:

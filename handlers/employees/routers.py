@@ -14,6 +14,7 @@ from config import (
     CONFIRM_ROUTER_OPERATION,
 )
 from utils.keyboards import get_main_keyboard
+from utils.helpers import run_in_thread
 
 
 async def select_employee_for_router(
@@ -31,8 +32,8 @@ async def select_employee_for_router(
     emp_id = int(query.data.split("_")[-1])
     context.user_data["selected_employee_id"] = emp_id
 
-    employee = flow.db.get_employee_by_id(emp_id)
-    routers = flow.db.get_employee_routers(emp_id)
+    employee = await run_in_thread(flow.db.get_employee_by_id, emp_id)
+    routers = await run_in_thread(flow.db.get_employee_routers, emp_id)
 
     if not employee:
         await query.edit_message_text("❌ Сотрудник не найден.")
@@ -69,10 +70,10 @@ async def select_router_action(flow: "EmployeeFlow", update: Update, context: Co
     await query.answer()
 
     if query.data == "rtr_back_to_list":
-        employees = flow.db.get_all_employees()
+        employees = await run_in_thread(flow.db.get_all_employees)
         keyboard = []
         for emp in employees:
-            routers = flow.db.get_employee_routers(emp["id"])
+            routers = await run_in_thread(flow.db.get_employee_routers, emp["id"])
             router_count = sum(r["quantity"] for r in routers)
             router_text = f"{router_count} шт." if router_count > 0 else "нет"
             keyboard.append(
@@ -111,7 +112,7 @@ async def select_router_action(flow: "EmployeeFlow", update: Update, context: Co
         return ENTER_ROUTER_NAME
 
     emp_id = context.user_data.get("selected_employee_id")
-    routers = flow.db.get_employee_routers(emp_id)
+    routers = await run_in_thread(flow.db.get_employee_routers, emp_id)
     if not routers:
         await query.edit_message_text("⚠️ У сотрудника нет роутеров для списания.")
         await query.message.reply_text("Выберите действие:", reply_markup=get_main_keyboard())
@@ -161,7 +162,7 @@ async def enter_router_name(flow: "EmployeeFlow", update: Update, context: Conte
 
         router_id = int(query.data.split("_")[-1])
         emp_id = context.user_data.get("selected_employee_id")
-        routers = flow.db.get_employee_routers(emp_id)
+        routers = await run_in_thread(flow.db.get_employee_routers, emp_id)
         selected_router = next((r for r in routers if r["id"] == router_id), None)
 
         if not selected_router:
@@ -207,7 +208,7 @@ async def enter_router_quantity(flow: "EmployeeFlow", update: Update, context: C
     emp_id = context.user_data.get("selected_employee_id")
     router_name = context.user_data.get("router_name")
     action = context.user_data.get("router_action")
-    employee = flow.db.get_employee_by_id(emp_id)
+    employee = await run_in_thread(flow.db.get_employee_by_id, emp_id)
     symbol = "+" if action == "add" else "-"
 
     keyboard = InlineKeyboardMarkup(
@@ -258,7 +259,7 @@ async def confirm_router_operation(
     router_name = context.user_data.get("router_name")
     quantity = context.user_data.get("router_quantity", 0)
     action = context.user_data.get("router_action")
-    employee = flow.db.get_employee_by_id(emp_id)
+    employee = await run_in_thread(flow.db.get_employee_by_id, emp_id)
 
     if not employee:
         await query.edit_message_text("❌ Сотрудник не найден.")
@@ -269,9 +270,11 @@ async def confirm_router_operation(
     created_by = query.from_user.id if query and query.from_user else None
 
     if action == "add":
-        success = flow.db.add_router_to_employee(emp_id, router_name, quantity, created_by=created_by)
+        success = await run_in_thread(
+            flow.db.add_router_to_employee, emp_id, router_name, quantity, created_by
+        )
         if success:
-            new_quantity = flow.db.get_router_quantity(emp_id, router_name)
+            new_quantity = await run_in_thread(flow.db.get_router_quantity, emp_id, router_name)
             await query.edit_message_text(
                 "✅ <b>Роутеры добавлены!</b>\n\n"
                 f"👤 Сотрудник: {employee['full_name']}\n"
@@ -283,11 +286,16 @@ async def confirm_router_operation(
         else:
             await query.edit_message_text("❌ Ошибка при добавлении роутеров.")
     else:
-        success = flow.db.deduct_router_from_employee(
-            emp_id, router_name, quantity, connection_id=None, created_by=created_by
+        success = await run_in_thread(
+            flow.db.deduct_router_from_employee,
+            emp_id,
+            router_name,
+            quantity,
+            None,
+            created_by,
         )
         if success:
-            new_quantity = flow.db.get_router_quantity(emp_id, router_name)
+            new_quantity = await run_in_thread(flow.db.get_router_quantity, emp_id, router_name)
             await query.edit_message_text(
                 "✅ <b>Роутеры списаны!</b>\n\n"
                 f"👤 Сотрудник: {employee['full_name']}\n"

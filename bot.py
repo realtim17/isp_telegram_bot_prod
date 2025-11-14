@@ -114,10 +114,6 @@ def main():
         ]
     )
     
-    # Wrapper для show_employees_list
-    async def show_employees_list_wrapper(update, context):
-        return await show_employees_list(update, context, db)
-    
     # Добавляем обработчики
     application.add_handler(CommandHandler('start', start_command))
     application.add_handler(CommandHandler('help', help_command))

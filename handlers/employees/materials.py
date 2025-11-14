@@ -14,6 +14,7 @@ from config import (
     CONFIRM_MATERIAL_OPERATION,
 )
 from utils.keyboards import get_main_keyboard
+from utils.helpers import run_in_thread
 
 
 async def select_employee_for_material(
@@ -29,7 +30,7 @@ async def select_employee_for_material(
         return await manage_employees_start(flow, update, context)
 
     emp_id = int(query.data.split("_")[2])
-    employee = flow.db.get_employee_by_id(emp_id)
+    employee = await run_in_thread(flow.db.get_employee_by_id, emp_id)
 
     if not employee:
         await query.edit_message_text("❌ Сотрудник не найден.")
@@ -72,7 +73,7 @@ async def select_material_action(
     await query.answer()
 
     if query.data == "mat_back_to_list":
-        employees = flow.db.get_all_employees()
+        employees = await run_in_thread(flow.db.get_all_employees)
         keyboard = [
             [
                 InlineKeyboardButton(
@@ -94,7 +95,7 @@ async def select_material_action(
         return SELECT_EMPLOYEE_FOR_MATERIAL
 
     emp_id = context.user_data.get("selected_employee_id")
-    employee = flow.db.get_employee_by_id(emp_id)
+    employee = await run_in_thread(flow.db.get_employee_by_id, emp_id)
     action = "add" if query.data == "mat_action_add" else "deduct"
     context.user_data["material_action"] = action
 
@@ -152,7 +153,7 @@ async def enter_twisted_amount(
 
     context.user_data["twisted_amount"] = twisted_amount
     emp_id = context.user_data.get("selected_employee_id")
-    employee = flow.db.get_employee_by_id(emp_id)
+    employee = await run_in_thread(flow.db.get_employee_by_id, emp_id)
     action = context.user_data.get("material_action")
     sign = "+" if action == "add" else "-"
 
@@ -206,7 +207,7 @@ async def confirm_material_operation(
     fiber_amount = context.user_data.get("fiber_amount", 0)
     twisted_amount = context.user_data.get("twisted_amount", 0)
     action = context.user_data.get("material_action")
-    employee = flow.db.get_employee_by_id(emp_id)
+    employee = await run_in_thread(flow.db.get_employee_by_id, emp_id)
 
     if not employee:
         await query.edit_message_text("❌ Сотрудник не найден.")
@@ -217,9 +218,15 @@ async def confirm_material_operation(
     created_by = query.from_user.id if query and query.from_user else None
 
     if action == "add":
-        success = flow.db.add_material_to_employee(emp_id, fiber_amount, twisted_amount, created_by=created_by)
+        success = await run_in_thread(
+            flow.db.add_material_to_employee,
+            emp_id,
+            fiber_amount,
+            twisted_amount,
+            created_by,
+        )
         if success:
-            updated_emp = flow.db.get_employee_by_id(emp_id)
+            updated_emp = await run_in_thread(flow.db.get_employee_by_id, emp_id)
             new_fiber = updated_emp.get("fiber_balance", 0) or 0
             new_twisted = updated_emp.get("twisted_pair_balance", 0) or 0
             await query.edit_message_text(
@@ -232,9 +239,16 @@ async def confirm_material_operation(
         else:
             await query.edit_message_text("❌ Ошибка при добавлении материалов.")
     else:
-        success = flow.db.deduct_material_from_employee(emp_id, fiber_amount, twisted_amount, created_by=created_by)
+        success = await run_in_thread(
+            flow.db.deduct_material_from_employee,
+            emp_id,
+            fiber_amount,
+            twisted_amount,
+            None,
+            created_by,
+        )
         if success:
-            updated_emp = flow.db.get_employee_by_id(emp_id)
+            updated_emp = await run_in_thread(flow.db.get_employee_by_id, emp_id)
             new_fiber = updated_emp.get("fiber_balance", 0) or 0
             new_twisted = updated_emp.get("twisted_pair_balance", 0) or 0
             await query.edit_message_text(

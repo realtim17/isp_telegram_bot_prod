@@ -7,6 +7,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes, ConversationHandler
 
 from utils.keyboards import get_main_keyboard
+from utils.helpers import run_in_thread
 from config import ADD_EMPLOYEE_NAME, CONFIRM_ADD_EMPLOYEE, DELETE_EMPLOYEE_SELECT
 
 
@@ -65,7 +66,7 @@ async def confirm_add_employee(flow: "EmployeeFlow", update: Update, context: Co
         await query.edit_message_text("❌ Не найдено ФИО. Попробуйте снова.")
         return ADD_EMPLOYEE_NAME
 
-    employee_id = flow.db.add_employee(full_name)
+    employee_id = await run_in_thread(flow.db.add_employee, full_name)
     if employee_id:
         await query.edit_message_text(
             f"✅ Сотрудник <b>{full_name}</b> успешно добавлен!",
@@ -95,8 +96,8 @@ async def delete_employee_confirm(flow: "EmployeeFlow", update: Update, context:
 
     if data.startswith("confirm_delete_"):
         emp_id = int(data.split("_")[-1])
-        employee = flow.db.get_employee_by_id(emp_id)
-        if employee and flow.db.delete_employee(emp_id):
+        employee = await run_in_thread(flow.db.get_employee_by_id, emp_id)
+        if employee and await run_in_thread(flow.db.delete_employee, emp_id):
             await query.edit_message_text(
                 f"✅ Сотрудник <b>{employee['full_name']}</b> удален!",
                 parse_mode="HTML",
@@ -108,7 +109,7 @@ async def delete_employee_confirm(flow: "EmployeeFlow", update: Update, context:
 
     if data.startswith("del_emp_"):
         emp_id = int(data.split("_")[2])
-        employee = flow.db.get_employee_by_id(emp_id)
+        employee = await run_in_thread(flow.db.get_employee_by_id, emp_id)
         if not employee:
             await query.edit_message_text("❌ Сотрудник не найден.")
             await query.message.reply_text("Выберите действие:", reply_markup=get_main_keyboard())
