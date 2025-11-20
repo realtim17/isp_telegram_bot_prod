@@ -46,6 +46,9 @@ async def show_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE, 
     # Получаем информацию о плательщиках
     material_payer_id = context.user_data.get('material_payer_id')
     router_payer_id = context.user_data.get('router_payer_id')
+    snr_box_payer_id = context.user_data.get('snr_box_payer_id')
+    snr_box_payer_id = context.user_data.get('snr_box_payer_id')
+    snr_box_payer_id = context.user_data.get('snr_box_payer_id')
     
     payer_info = ""
     if material_payer_id:
@@ -68,9 +71,22 @@ async def show_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE, 
             quantity_text = f" ({router_quantity} шт.)" if router_quantity > 1 else ""
             payer_info += f"\n📡 <b>Роутер списывается с:</b> {router_payer['full_name']}{quantity_text}"
     
+    if snr_box_payer_id:
+        snr_payer = employee_map.get(snr_box_payer_id)
+        if not snr_payer:
+            snr_payer = await run_in_thread(db.get_employee_by_id, snr_box_payer_id)
+            if snr_payer:
+                employee_map[snr_box_payer_id] = snr_payer
+        if snr_payer:
+            payer_info += f"\n🧰 <b>SNR бокс списывается с:</b> {snr_payer['full_name']}"
+    
     # Формируем отображение роутера
     router_model = data.get('router_model', '-')
     router_quantity = data.get('router_quantity', 1)
+    snr_box_model = data.get('snr_box_model', '-')
+    snr_box_model = data.get('snr_box_model', '-')
+    snr_box_model = data.get('snr_box_model', '-')
+    snr_box_model = data.get('snr_box_model', '-') or '-'
     
     if router_model == '-' or not router_model:
         router_display = "-"
@@ -78,6 +94,8 @@ async def show_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE, 
         router_display = router_model
         if router_quantity > 1:
             router_display += f" ({router_quantity} шт.)"
+    
+    snr_display = snr_box_model if snr_box_model and snr_box_model != '-' else "-"
     
     # Формируем отображение порта
     port = data.get('port', '-')
@@ -101,6 +119,7 @@ async def show_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE, 
 <b>📍 Адрес:</b> {data['address']}
 <b>Тип подключения:</b> {type_name}
 <b>Модель роутера:</b> {router_display}
+<b>SNR бокс:</b> {snr_display}
 <b>Доступ на роутер:</b> {router_access_status}
 <b>Договор:</b> {contract_status}
 <b>Телеграмм Бот:</b> {telegram_bot_status}
@@ -166,12 +185,14 @@ async def confirm_connection(update: Update, context: ContextTypes.DEFAULT_TYPE,
     contract_signed = data.get('contract_signed', False)
     router_access = data.get('router_access', False)
     telegram_bot_connected = data.get('telegram_bot_connected', False)
+    snr_box_model = data.get('snr_box_model', '-')
     
     connection_id = await run_in_thread(
         db.create_connection,
         connection_type=data.get('connection_type', 'mkd'),
         address=data['address'],
         router_model=data['router_model'],
+        snr_box_model=snr_box_model,
         port=data['port'],
         fiber_meters=data['fiber_meters'],
         twisted_pair_meters=data['twisted_pair_meters'],
@@ -201,6 +222,21 @@ async def confirm_connection(update: Update, context: ContextTypes.DEFAULT_TYPE,
                 logger.info(f"Роутер '{router_model}' x{router_quantity} списан с сотрудника ID {router_payer_id}")
             else:
                 logger.warning(f"Не удалось списать роутер '{router_model}' x{router_quantity} с сотрудника ID {router_payer_id}")
+        
+        # Списываем SNR бокс, если выбран
+        if snr_box_payer_id and snr_box_model and snr_box_model != '-':
+            snr_success = await run_in_thread(
+                db.deduct_snr_box_from_employee,
+                snr_box_payer_id,
+                snr_box_model,
+                1,
+                connection_id=connection_id,
+                created_by=user_id
+            )
+            if snr_success:
+                logger.info("SNR бокс '%s' списан с сотрудника ID %s", snr_box_model, snr_box_payer_id)
+            else:
+                logger.warning("Не удалось списать SNR бокс '%s' с сотрудника ID %s", snr_box_model, snr_box_payer_id)
         
         # Отправляем подтверждение
         await query.edit_message_text(

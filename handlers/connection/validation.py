@@ -6,7 +6,7 @@ import asyncio
 from telegram import Update, InlineKeyboardButton
 from telegram.ext import ContextTypes, ConversationHandler
 
-from config import SELECT_MATERIAL_PAYER, SELECT_ROUTER_PAYER
+from config import SELECT_MATERIAL_PAYER, SELECT_ROUTER_PAYER, SELECT_SNR_PAYER
 from utils.keyboards import get_main_keyboard
 from utils.helpers import run_in_thread
 from handlers.connection.ui import build_inline_keyboard
@@ -124,8 +124,7 @@ async def check_routers_and_proceed(update: Update, context: ContextTypes.DEFAUL
     
     # Если роутер пропущен, сразу переходим к подтверждению
     if router_model == '-' or not router_model:
-        from handlers.connection.confirmation import show_confirmation
-        return await show_confirmation(update, context, db)
+        return await check_snr_boxes_and_proceed(update, context, db)
     
     # Получаем информацию о роутерах у сотрудников (параллельно)
     async def _fetch_router_info(emp_id: int):
@@ -176,8 +175,7 @@ async def check_routers_and_proceed(update: Update, context: ContextTypes.DEFAUL
     elif len(employees_with_enough) == 1:
         # Только у одного есть достаточно роутеров
         context.user_data['router_payer_id'] = employees_with_enough[0]['id']
-        from handlers.connection.confirmation import show_confirmation
-        return await show_confirmation(update, context, db)
+        return await check_snr_boxes_and_proceed(update, context, db)
     
     else:
         # У нескольких есть достаточно роутеров - предлагаем выбрать
@@ -210,6 +208,89 @@ async def select_router_payer(update: Update, context: ContextTypes.DEFAULT_TYPE
     
     payer_id = int(query.data.split('_')[-1])
     context.user_data['router_payer_id'] = payer_id
+    
+    return await check_snr_boxes_and_proceed(update, context, db)
+
+
+async def check_snr_boxes_and_proceed(update: Update, context: ContextTypes.DEFAULT_TYPE, db) -> int:
+    """Проверить наличие SNR боксов"""
+    data = context.user_data['connection_data']
+    snr_model = data.get('snr_box_model', '-')
+    
+    if not snr_model or snr_model == '-':
+        from handlers.connection.confirmation import show_confirmation
+        return await show_confirmation(update, context, db)
+    
+    selected_employees = context.user_data.get('selected_employees', [])
+    if not selected_employees:
+        await update.effective_message.reply_text(
+            "❌ Нет выбранных сотрудников для списания SNR бокса.",
+            reply_markup=get_main_keyboard()
+        )
+        context.user_data.clear()
+        return ConversationHandler.END
+    
+    employees_info = []
+    for emp_id in selected_employees:
+        emp = await run_in_thread(db.get_employee_by_id, emp_id)
+        if not emp:
+            continue
+        quantity = await run_in_thread(db.get_snr_box_quantity, emp_id, snr_model)
+        employees_info.append({
+            'id': emp_id,
+            'name': emp['full_name'],
+            'quantity': quantity
+        })
+    
+    employees_with_enough = [e for e in employees_info if e['quantity'] >= 1]
+    query = update.callback_query
+    
+    if len(employees_with_enough) == 0:
+        emp_list = '\n'.join([f"• {e['name']}: {e['quantity']} шт." for e in employees_info]) or "-"
+        if query:
+            await query.edit_message_text(
+                f"❌ <b>Недостаточно SNR боксов!</b>\n\n"
+                f"Требуется бокс: <b>{snr_model}</b>\n\n"
+                f"Балансы исполнителей:\n{emp_list}\n\n"
+                f"Добавьте боксы через:\nУправление сотрудниками → SNR Оптические боксы",
+                parse_mode='HTML'
+            )
+            await query.message.reply_text("Выберите действие:", reply_markup=get_main_keyboard())
+        context.user_data.clear()
+        return ConversationHandler.END
+    
+    if len(employees_with_enough) == 1:
+        context.user_data['snr_box_payer_id'] = employees_with_enough[0]['id']
+        from handlers.connection.confirmation import show_confirmation
+        return await show_confirmation(update, context, db)
+    
+    keyboard = [
+        [InlineKeyboardButton(
+            f"🧰 {emp['name']} ({emp['quantity']} шт.)",
+            callback_data=f"snr_payer_{emp['id']}"
+        )]
+        for emp in employees_with_enough
+    ]
+    keyboard.append([InlineKeyboardButton("❌ Отмена", callback_data='cancel_connection')])
+    
+    if query:
+        await query.edit_message_text(
+            f"🧰 <b>Выбор плательщика SNR бокса</b>\n\n"
+            f"Бокс: {snr_model}\n\n"
+            "Выберите, с кого списать бокс:",
+            reply_markup=build_inline_keyboard(keyboard),
+            parse_mode='HTML'
+        )
+    return SELECT_SNR_PAYER
+
+
+async def select_snr_payer(update: Update, context: ContextTypes.DEFAULT_TYPE, db) -> int:
+    """Выбор плательщика SNR бокса"""
+    query = update.callback_query
+    await query.answer()
+    
+    payer_id = int(query.data.split('_')[-1])
+    context.user_data['snr_box_payer_id'] = payer_id
     
     from handlers.connection.confirmation import show_confirmation
     return await show_confirmation(update, context, db)

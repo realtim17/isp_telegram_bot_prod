@@ -338,12 +338,13 @@ class ReportGenerator:
             type_map = {
                 'fiber': 'ВОЛС',
                 'twisted_pair': 'Витая пара',
-                'router': 'Роутер'
+                'router': 'Роутер',
+                'snr_box': 'SNR бокс'
             }
             item_type = type_map.get(mov['item_type'], mov['item_type'])
             
             # Количество
-            if mov['item_type'] == 'router':
+            if mov['item_type'] in ('router', 'snr_box'):
                 quantity_str = f"{int(mov['quantity'])} шт."
                 balance_str = f"{int(mov['balance_after'])} шт."
             else:

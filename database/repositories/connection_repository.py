@@ -18,6 +18,7 @@ class ConnectionRepository(BaseRepository):
         connection_type: str,
         address: str,
         router_model: str,
+        snr_box_model: str,
         port: str,
         fiber_meters: float,
         twisted_pair_meters: float,
@@ -35,12 +36,12 @@ class ConnectionRepository(BaseRepository):
             # Создаем запись подключения
             cursor.execute("""
                 INSERT INTO connections 
-                (connection_type, address, router_model, port, fiber_meters, 
+                (connection_type, address, router_model, snr_box_model, port, fiber_meters, 
                  twisted_pair_meters, created_by, router_quantity, contract_signed, 
                  router_access, telegram_bot_connected)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
-                connection_type, address, router_model, port, fiber_meters,
+                connection_type, address, router_model, snr_box_model, port, fiber_meters,
                 twisted_pair_meters, created_by, router_quantity,
                 1 if contract_signed else 0,
                 1 if router_access else 0,
@@ -93,7 +94,7 @@ class ConnectionRepository(BaseRepository):
             # Получаем основную информацию
             cursor.execute("""
                 SELECT id, connection_type, address, router_model, port, fiber_meters, 
-                       twisted_pair_meters, created_at, created_by, router_quantity, 
+                       snr_box_model, twisted_pair_meters, created_at, created_by, router_quantity, 
                        contract_signed, router_access, telegram_bot_connected
                 FROM connections
                 WHERE id = ?
@@ -163,6 +164,7 @@ class ConnectionRepository(BaseRepository):
                     c.connection_type,
                     c.address,
                     c.router_model,
+                    c.snr_box_model,
                     c.port,
                     c.fiber_meters,
                     c.twisted_pair_meters,

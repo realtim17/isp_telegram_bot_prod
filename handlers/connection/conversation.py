@@ -8,7 +8,7 @@ from config import (
     SELECT_CONNECTION_TYPE, UPLOAD_PHOTOS, ENTER_ADDRESS, SELECT_ROUTER,
     ENTER_ROUTER_QUANTITY_CONNECTION, ROUTER_ACCESS, ENTER_PORT, ENTER_FIBER,
     ENTER_TWISTED, CONTRACT_SIGNED, TELEGRAM_BOT_CONFIRM, SELECT_EMPLOYEES, 
-    SELECT_MATERIAL_PAYER, SELECT_ROUTER_PAYER, CONFIRM
+    SELECT_MATERIAL_PAYER, SELECT_ROUTER_PAYER, SELECT_SNR_BOX, SELECT_SNR_PAYER, CONFIRM
 )
 
 # Импорт обработчиков шагов
@@ -25,7 +25,8 @@ from handlers.connection.steps import (
     enter_fiber,
     enter_twisted,
     contract_signed,
-    telegram_bot_confirm
+    telegram_bot_confirm,
+    select_snr_box
 )
 
 # Импорт обработчиков выбора исполнителей
@@ -36,7 +37,8 @@ from handlers.connection.employees import (
 # Импорт обработчиков валидации
 from handlers.connection.validation import (
     select_material_payer,
-    select_router_payer
+    select_router_payer,
+    select_snr_payer
 )
 
 # Импорт обработчиков подтверждения
@@ -60,6 +62,9 @@ def build_connection_conversation(db) -> ConversationHandler:
     async def telegram_bot_confirm_wrapper(update, context):
         return await telegram_bot_confirm(update, context, db)
     
+    async def select_snr_box_wrapper(update, context):
+        return await select_snr_box(update, context, db)
+    
     async def select_employee_toggle_wrapper(update, context):
         return await select_employee_toggle(update, context, db)
     
@@ -68,6 +73,9 @@ def build_connection_conversation(db) -> ConversationHandler:
     
     async def select_router_payer_wrapper(update, context):
         return await select_router_payer(update, context, db)
+    
+    async def select_snr_payer_wrapper(update, context):
+        return await select_snr_payer(update, context, db)
     
     async def confirm_connection_wrapper(update, context):
         return await confirm_connection(update, context, db)
@@ -117,6 +125,9 @@ def build_connection_conversation(db) -> ConversationHandler:
             TELEGRAM_BOT_CONFIRM: [
                 CallbackQueryHandler(telegram_bot_confirm_wrapper, pattern='^(telegram_bot_confirmed|telegram_bot_skipped|cancel_connection)$')
             ],
+            SELECT_SNR_BOX: [
+                CallbackQueryHandler(select_snr_box_wrapper, pattern='^(snr_box_.*|snr_skip|cancel_connection)$')
+            ],
             SELECT_EMPLOYEES: [
                 CallbackQueryHandler(select_employee_toggle_wrapper, pattern='^(emp_.*|employees_done)$'),
                 CallbackQueryHandler(cancel_connection, pattern='^cancel_connection$')
@@ -127,6 +138,10 @@ def build_connection_conversation(db) -> ConversationHandler:
             ],
             SELECT_ROUTER_PAYER: [
                 CallbackQueryHandler(select_router_payer_wrapper, pattern='^router_payer_'),
+                CallbackQueryHandler(cancel_connection, pattern='^cancel_connection$')
+            ],
+            SELECT_SNR_PAYER: [
+                CallbackQueryHandler(select_snr_payer_wrapper, pattern='^snr_payer_'),
                 CallbackQueryHandler(cancel_connection, pattern='^cancel_connection$')
             ],
             CONFIRM: [

@@ -10,6 +10,8 @@ from telegram.ext import (
     CallbackQueryHandler,
     ConversationHandler,
     ContextTypes,
+    TypeHandler,
+    ApplicationHandlerStop,
     filters
 )
 
@@ -18,7 +20,9 @@ from config import (
     TELEGRAM_BOT_TOKEN,
     SELECT_REPORT_EMPLOYEE, SELECT_REPORT_PERIOD,
     ENTER_REPORT_CUSTOM_START, ENTER_REPORT_CUSTOM_END,
-    logger
+    logger,
+    ALLOWED_USER_IDS,
+    ADMIN_IDS,
 )
 
 # Импорт базы данных
@@ -34,6 +38,9 @@ from handlers.commands import (
 
 # Импорт клавиатуры
 from utils.keyboards import get_main_keyboard
+from utils.helpers import ensure_user_authorized
+from utils.access import AccessManager
+from utils.admins import AdminManager
 
 # Импорт ConversationHandler для подключений
 from handlers.connection import build_connection_conversation
@@ -53,7 +60,9 @@ from handlers.reports import (
 # Инициализация БД
 db = Database()
 connection_conv = build_connection_conversation(db)
-employee_flow = EmployeeFlow(db)
+access_manager = AccessManager(db, ALLOWED_USER_IDS)
+admin_manager = AdminManager(db, ADMIN_IDS)
+employee_flow = EmployeeFlow(db, access_manager, admin_manager)
 
 
 def main():
@@ -113,6 +122,14 @@ def main():
             MessageHandler(menu_buttons_filter, cancel_and_start_new)
         ]
     )
+    
+    # Глобальный guard доступа
+    async def authorization_guard(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if await ensure_user_authorized(update, access_manager):
+            return
+        raise ApplicationHandlerStop
+    
+    application.add_handler(TypeHandler(Update, authorization_guard), group=-1)
     
     # Добавляем обработчики
     application.add_handler(CommandHandler('start', start_command))

@@ -7,9 +7,14 @@ import logging
 import asyncio
 from functools import partial
 
-from telegram import InputMediaPhoto
+from telegram import InputMediaPhoto, Update
 
-from config import REPORTS_CHANNEL_ID, CONNECTION_TYPES
+from config import (
+    REPORTS_CHANNEL_ID,
+    CONNECTION_TYPES,
+    ACCESS_DENIED_MESSAGE,
+)
+from utils.access import AccessManager
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +57,9 @@ def _format_report_text(connection_id: int, data: Dict, employee_names: List[str
     if router_quantity > 1:
         router_info += f" ({router_quantity} шт.)"
     
+    snr_model = data.get('snr_box_model', '-') or '-'
+    snr_info = snr_model if snr_model and snr_model != '-' else "-"
+    
     # Получаем информацию о порте
     port = data.get('port', '-')
     port_display = port if port and port != '' else '-'
@@ -74,6 +82,7 @@ def _format_report_text(connection_id: int, data: Dict, employee_names: List[str
 <b>📍 Адрес:</b> {data['address']}
 <b> Тип подключения:</b> {type_name}
 <b> Модель роутера:</b> {router_info}
+<b> SNR бокс:</b> {snr_info}
 <b> Доступ на роутер:</b> {router_access_status}
 <b> Договор:</b> {contract_status}
 <b> Телеграмм Бот:</b> {telegram_bot_status}
@@ -134,3 +143,32 @@ async def send_connection_report(message, connection_id: int, data: Dict, photos
             "⚠️ Отчет создан, но возникла ошибка при отправке фотографий.",
             parse_mode='HTML'
         )
+
+
+async def ensure_user_authorized(update: Update, access_manager: AccessManager | None = None) -> bool:
+    """Проверить, есть ли у пользователя доступ к боту"""
+    user = update.effective_user
+    if not user or not access_manager:
+        return True
+    if access_manager.is_allowed(user.id):
+        return True
+    await _notify_access_denied(update)
+    logger.info("Доступ запрещен для пользователя ID %s", user.id)
+    return False
+
+
+async def _notify_access_denied(update: Update) -> None:
+    """Отправить сообщение об отсутствии доступа"""
+    query = update.callback_query
+    message = update.effective_message
+    
+    if query:
+        try:
+            await query.answer("⛔ Нет доступа", show_alert=True)
+        except Exception as exc:
+            logger.debug("Не удалось отправить alert об отказе доступа: %s", exc)
+    
+    if message:
+        await message.reply_text(ACCESS_DENIED_MESSAGE)
+    else:
+        logger.warning("Получен апдейт без message для уведомления об отказе доступа")

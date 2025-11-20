@@ -1,12 +1,67 @@
 """
 Обработчики выбора исполнителей для подключения
 """
-from telegram import Update, InlineKeyboardButton
-from telegram.ext import ContextTypes
+from typing import Optional
 
-from config import SELECT_EMPLOYEES, logger
+from telegram import Update, InlineKeyboardButton
+from telegram.ext import ContextTypes, ConversationHandler
+
+from config import SELECT_EMPLOYEES
+from utils.keyboards import get_main_keyboard
 from utils.helpers import run_in_thread
 from handlers.connection.ui import build_inline_keyboard
+
+
+async def start_employee_selection(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    db,
+    pre_text: Optional[str] = None
+) -> int:
+    """Показать шаг выбора исполнителей"""
+    query = update.callback_query
+    
+    employees = await run_in_thread(db.get_all_employees) or []
+    if not employees:
+        await query.edit_message_text(
+            "⚠️ В системе нет ни одного сотрудника!\n\n"
+            "Обратитесь к администратору для добавления сотрудников.",
+            reply_markup=None
+        )
+        await query.message.reply_text(
+            "Выберите действие:",
+            reply_markup=get_main_keyboard()
+        )
+        return ConversationHandler.END
+    
+    context.user_data['selected_employees'] = []
+    keyboard = [
+        [InlineKeyboardButton(f"☐ {emp['full_name']}", callback_data=f"emp_{emp['id']}")]
+        for emp in employees
+    ]
+    keyboard.append([InlineKeyboardButton("✅ Готово", callback_data='employees_done')])
+    reply_markup = build_inline_keyboard(keyboard)
+    
+    message_parts = []
+    if pre_text:
+        message_parts.append(pre_text)
+    message_parts.append(
+        "👥 <b>Шаг 13/13: Выбор исполнителей</b>\n\n"
+        "Выберите сотрудников, которые участвовали в подключении:\n"
+        "(можно выбрать нескольких)"
+    )
+    message_text = "\n\n".join(message_parts)
+    
+    await query.edit_message_text(
+        message_text,
+        parse_mode='HTML'
+    )
+    await query.message.reply_text(
+        "Нажмите ✅ Готово после выбора:",
+        reply_markup=reply_markup
+    )
+    
+    return SELECT_EMPLOYEES
 
 
 async def select_employee_toggle(update: Update, context: ContextTypes.DEFAULT_TYPE, db) -> int:
@@ -21,7 +76,6 @@ async def select_employee_toggle(update: Update, context: ContextTypes.DEFAULT_T
             await query.answer("⚠️ Выберите хотя бы одного сотрудника!", show_alert=True)
             return SELECT_EMPLOYEES
         
-        # Проверяем балансы и определяем, кто будет платить за материалы
         from handlers.connection.validation import check_materials_and_proceed
         return await check_materials_and_proceed(update, context, db)
     

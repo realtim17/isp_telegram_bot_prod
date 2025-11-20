@@ -7,13 +7,13 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes, ConversationHandler
 
 from config import (
-    is_admin,
     MANAGE_ACTION,
     ADD_EMPLOYEE_NAME,
     DELETE_EMPLOYEE_SELECT,
     SELECT_EMPLOYEE_FOR_MATERIAL,
     SELECT_MATERIAL_ACTION,
     SELECT_EMPLOYEE_FOR_ROUTER,
+    SELECT_EMPLOYEE_FOR_SNR,
     logger,
 )
 from utils.keyboards import get_main_keyboard
@@ -24,7 +24,7 @@ async def manage_employees_start(flow: "EmployeeFlow", update: Update, context: 
     """Начало работы с управлением сотрудниками"""
     user_id = update.effective_user.id
 
-    if not is_admin(user_id):
+    if not flow.admin_manager or not flow.admin_manager.is_admin(user_id):
         text = "⛔ У вас нет прав для управления сотрудниками."
         if update.callback_query:
             await update.callback_query.answer(text, show_alert=True)
@@ -38,6 +38,9 @@ async def manage_employees_start(flow: "EmployeeFlow", update: Update, context: 
         [InlineKeyboardButton("➖ Удалить сотрудника", callback_data="manage_delete")],
         [InlineKeyboardButton("📦 Управление материалами", callback_data="manage_materials")],
         [InlineKeyboardButton("📡 Управление роутерами", callback_data="manage_routers")],
+        [InlineKeyboardButton("🧰 SNR Оптические боксы", callback_data="manage_snr")],
+        [InlineKeyboardButton("🔐 Управление доступом", callback_data="manage_access")],
+        [InlineKeyboardButton("👑 Управление администраторами", callback_data="manage_admins")],
         [InlineKeyboardButton("👤 Список всех сотрудников", callback_data="manage_list")],
         [InlineKeyboardButton("❌ Отмена", callback_data="manage_cancel")],
     ]
@@ -152,6 +155,42 @@ async def manage_action(flow: "EmployeeFlow", update: Update, context: ContextTy
             parse_mode="HTML",
         )
         return SELECT_EMPLOYEE_FOR_ROUTER
+    
+    if data == "manage_snr":
+        employees = await run_in_thread(flow.db.get_all_employees)
+        if not employees:
+            await query.edit_message_text("⚠️ В системе нет сотрудников.")
+            await query.message.reply_text("Выберите действие:", reply_markup=get_main_keyboard())
+            return ConversationHandler.END
+        
+        keyboard = []
+        for emp in employees:
+            boxes = await run_in_thread(flow.db.get_employee_snr_boxes, emp["id"])
+            total = sum(box["quantity"] for box in boxes)
+            info = f"{total} шт." if total > 0 else "нет"
+            keyboard.append(
+                [InlineKeyboardButton(f"🧰 {emp['full_name']} ({info})", callback_data=f"snr_emp_{emp['id']}")]
+            )
+        keyboard.append([InlineKeyboardButton("◀️ Назад", callback_data="back_to_manage")])
+        
+        await query.edit_message_text(
+            "🧰 <b>SNR Оптические боксы</b>\n\nВыберите сотрудника:",
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode="HTML",
+        )
+        return SELECT_EMPLOYEE_FOR_SNR
+
+    if data == "manage_access":
+        if not flow.access_manager:
+            await query.answer("Функция недоступна", show_alert=True)
+            return MANAGE_ACTION
+        return await flow.access_menu(update, context)
+
+    if data == "manage_admins":
+        if not flow.admin_manager:
+            await query.answer("Функция недоступна", show_alert=True)
+            return MANAGE_ACTION
+        return await flow.admin_menu(update, context)
 
     if data == "manage_list":
         employees = await run_in_thread(flow.db.get_all_employees)

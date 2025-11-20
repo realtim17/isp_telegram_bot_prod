@@ -4,13 +4,17 @@
 """
 import sqlite3
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import List, Dict, Optional, Tuple
 import logging
 
 from database.repositories.employee_repository import EmployeeRepository
 from database.repositories.material_repository import MaterialRepository
 from database.repositories.router_repository import RouterRepository
+from database.repositories.snr_box_repository import SNRBoxRepository
 from database.repositories.connection_repository import ConnectionRepository
+from database.repositories.access_repository import AccessRepository
+from database.repositories.admin_repository import AdminRepository
 
 logger = logging.getLogger(__name__)
 
@@ -23,13 +27,20 @@ class Database:
     
     def __init__(self, db_path: str = "isp_bot.db"):
         """Инициализация подключения к БД и репозиториев"""
-        self.db_path = db_path
+        base_dir = Path(__file__).resolve().parents[1]
+        db_path = Path(db_path)
+        if not db_path.is_absolute():
+            db_path = (base_dir / db_path).resolve()
+        self.db_path = str(db_path)
         
         # Инициализация репозиториев
-        self.employees_repo = EmployeeRepository(db_path)
-        self.materials_repo = MaterialRepository(db_path)
-        self.routers_repo = RouterRepository(db_path)
-        self.connections_repo = ConnectionRepository(db_path)
+        self.employees_repo = EmployeeRepository(self.db_path)
+        self.materials_repo = MaterialRepository(self.db_path)
+        self.routers_repo = RouterRepository(self.db_path)
+        self.connections_repo = ConnectionRepository(self.db_path)
+        self.snr_repo = SNRBoxRepository(self.db_path)
+        self.access_repo = AccessRepository(self.db_path)
+        self.admin_repo = AdminRepository(self.db_path)
         
         # Создаем таблицы
         self.create_tables()
@@ -76,6 +87,7 @@ class Database:
                 connection_type TEXT NOT NULL DEFAULT 'mkd',
                 address TEXT NOT NULL,
                 router_model TEXT NOT NULL,
+                snr_box_model TEXT NOT NULL DEFAULT '-',
                 port TEXT NOT NULL,
                 fiber_meters REAL NOT NULL,
                 twisted_pair_meters REAL NOT NULL,
@@ -98,6 +110,13 @@ class Database:
             logger.info("Добавлено поле router_quantity в таблицу connections")
         except sqlite3.OperationalError:
             # Поле уже существует
+            pass
+        
+        # Добавляем поле snr_box_model
+        try:
+            cursor.execute("ALTER TABLE connections ADD COLUMN snr_box_model TEXT NOT NULL DEFAULT '-'")
+            logger.info("Добавлено поле snr_box_model в таблицу connections")
+        except sqlite3.OperationalError:
             pass
         
         # Добавляем поле contract_signed в существующую таблицу (если его нет)
@@ -177,6 +196,18 @@ class Database:
             )
         """)
         
+        # Таблица SNR оптических боксов
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS employee_snr_boxes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                employee_id INTEGER NOT NULL,
+                box_name TEXT NOT NULL,
+                quantity INTEGER NOT NULL DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
+            )
+        """)
+        
         # Таблица логов движения материалов и роутеров
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS material_movement_log (
@@ -192,6 +223,25 @@ class Database:
                 created_by INTEGER,
                 FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE,
                 FOREIGN KEY (connection_id) REFERENCES connections(id) ON DELETE SET NULL
+            )
+        """)
+
+        # Таблица разрешенных пользователей бота
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS bot_access (
+                user_id INTEGER PRIMARY KEY,
+                title TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                created_by INTEGER
+            )
+        """)
+
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS bot_admins (
+                user_id INTEGER PRIMARY KEY,
+                title TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                created_by INTEGER
             )
         """)
         
@@ -261,7 +311,37 @@ class Database:
     def delete_employee(self, employee_id: int) -> bool:
         """Удалить сотрудника"""
         return self.employees_repo.delete(employee_id)
-    
+
+    # ==================== ДОСТУП К БОТУ ====================
+
+    def get_allowed_users(self) -> List[Dict]:
+        """Список пользователей с доступом к боту"""
+        return self.access_repo.get_all()
+
+    def add_allowed_user(self, user_id: int, title: Optional[str] = None,
+                         created_by: Optional[int] = None) -> bool:
+        """Выдать доступ пользователю"""
+        return self.access_repo.add(user_id, title, created_by)
+
+    def remove_allowed_user(self, user_id: int) -> bool:
+        """Отозвать доступ у пользователя"""
+        return self.access_repo.remove(user_id)
+
+    # ==================== АДМИНИСТРАТОРЫ ====================
+
+    def get_bot_admins(self) -> List[Dict]:
+        """Получить список администраторов, добавленных через бота"""
+        return self.admin_repo.get_all()
+
+    def add_bot_admin(self, user_id: int, title: Optional[str] = None,
+                      created_by: Optional[int] = None) -> bool:
+        """Добавить администратора"""
+        return self.admin_repo.add(user_id, title, created_by)
+
+    def remove_bot_admin(self, user_id: int) -> bool:
+        """Удалить администратора"""
+        return self.admin_repo.remove(user_id)
+
     # ==================== МАТЕРИАЛЫ (делегирование MaterialRepository) ====================
     
     def add_material_to_employee(self, employee_id: int, fiber_meters: float = 0, 
@@ -305,6 +385,26 @@ class Database:
         """Получить список всех уникальных названий роутеров"""
         return self.routers_repo.get_all_names()
     
+    # ==================== SNR ОПТИЧЕСКИЕ БОКСЫ ====================
+    
+    def add_snr_box_to_employee(self, employee_id: int, box_name: str, quantity: int,
+                                created_by: Optional[int] = None) -> bool:
+        return self.snr_repo.add_box(employee_id, box_name, quantity, created_by)
+    
+    def deduct_snr_box_from_employee(self, employee_id: int, box_name: str, quantity: int = 1,
+                                     connection_id: Optional[int] = None,
+                                     created_by: Optional[int] = None) -> bool:
+        return self.snr_repo.deduct_box(employee_id, box_name, quantity, connection_id, created_by)
+    
+    def get_employee_snr_boxes(self, employee_id: int) -> List[Dict]:
+        return self.snr_repo.get_boxes(employee_id)
+    
+    def get_snr_box_quantity(self, employee_id: int, box_name: str) -> int:
+        return self.snr_repo.get_quantity(employee_id, box_name)
+    
+    def get_all_snr_box_names(self) -> List[str]:
+        return self.snr_repo.get_all_names()
+    
     def get_employee_movements(self, employee_id: int, start_date: datetime, 
                               end_date: datetime) -> List[Dict]:
         """Получить все движения материалов и роутеров сотрудника за период"""
@@ -317,6 +417,7 @@ class Database:
         connection_type: str,
         address: str,
         router_model: str,
+        snr_box_model: str,
         port: str,
         fiber_meters: float,
         twisted_pair_meters: float,
@@ -342,10 +443,10 @@ class Database:
             
             cursor.execute("""
                 INSERT INTO connections 
-                (connection_type, address, router_model, port, fiber_meters, twisted_pair_meters, created_by, router_quantity, contract_signed, router_access, telegram_bot_connected)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (connection_type, address, router_model, snr_box_model, port, fiber_meters, twisted_pair_meters, created_by, router_quantity, contract_signed, router_access, telegram_bot_connected)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
-                connection_type, address, router_model, port,
+                connection_type, address, router_model, snr_box_model, port,
                 fiber_meters, twisted_pair_meters, created_by,
                 router_quantity, 1 if contract_signed else 0,
                 1 if router_access else 0, 1 if telegram_bot_connected else 0

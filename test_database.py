@@ -89,6 +89,7 @@ class TestDatabase(unittest.TestCase):
         conn_id = self.db.create_connection(
             address="ул. Тестовая, д. 1",
             router_model="Test Router",
+            snr_box_model="Test Box",
             port="8",
             fiber_meters=100.0,
             twisted_pair_meters=20.0,
@@ -109,6 +110,7 @@ class TestDatabase(unittest.TestCase):
         conn_id = self.db.create_connection(
             address="ул. Ленина, д. 10",
             router_model="Keenetic",
+            snr_box_model="-",
             port="5",
             fiber_meters=150.0,
             twisted_pair_meters=25.0,
@@ -146,6 +148,7 @@ class TestDatabase(unittest.TestCase):
         conn_id = self.db.create_connection(
             address="ул. Мира, д. 5",
             router_model="TP-Link",
+            snr_box_model="-",
             port="3",
             fiber_meters=100.0,
             twisted_pair_meters=15.0,
@@ -170,6 +173,7 @@ class TestDatabase(unittest.TestCase):
         self.db.create_connection(
             address="ул. Пушкина, д. 3",
             router_model="Mikrotik",
+            snr_box_model="-",
             port="12",
             fiber_meters=200.0,
             twisted_pair_meters=30.0,
@@ -194,6 +198,7 @@ class TestDatabase(unittest.TestCase):
         self.db.create_connection(
             address="Адрес 1",
             router_model="Router 1",
+            snr_box_model="-",
             port="1",
             fiber_meters=100.0,
             twisted_pair_meters=10.0,
@@ -206,6 +211,7 @@ class TestDatabase(unittest.TestCase):
         self.db.create_connection(
             address="Адрес 2",
             router_model="Router 2",
+            snr_box_model="-",
             port="2",
             fiber_meters=200.0,
             twisted_pair_meters=20.0,
@@ -234,6 +240,7 @@ class TestDatabase(unittest.TestCase):
             self.db.create_connection(
                 address=f"Адрес {i}",
                 router_model="Router",
+                snr_box_model="-",
                 port=str(i),
                 fiber_meters=100.0,
                 twisted_pair_meters=10.0,

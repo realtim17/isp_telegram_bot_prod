@@ -59,6 +59,17 @@ SELECT_REPORT_EMPLOYEE = 30
 SELECT_REPORT_PERIOD = 31
 ENTER_REPORT_CUSTOM_START = 32
 ENTER_REPORT_CUSTOM_END = 33
+SELECT_EMPLOYEE_FOR_SNR = 34
+SELECT_SNR_ACTION = 35
+ENTER_SNR_NAME = 36
+ENTER_SNR_QUANTITY = 37
+CONFIRM_SNR_OPERATION = 38
+SELECT_SNR_BOX = 39
+SELECT_SNR_PAYER = 40
+MANAGE_ACCESS = 41
+ENTER_ACCESS_ID = 42
+MANAGE_ADMINS = 43
+ENTER_ADMIN_ID = 44
 
 # Типы подключений
 CONNECTION_TYPES = {
@@ -71,8 +82,21 @@ CONNECTION_TYPES = {
 # Токен бота
 TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
 
-# Загрузка ID администраторов
+# Загрузка ID администраторов (суперадминов)
 ADMIN_IDS = [int(id.strip()) for id in os.getenv('ADMIN_USER_IDS', '').split(',') if id.strip()]
+
+# Список пользователей с доступом к боту
+ALLOWED_USER_IDS = {
+    int(user_id.strip()) for user_id in os.getenv('ALLOWED_USER_IDS', '').split(',') if user_id.strip()
+}
+
+ACCESS_DENIED_MESSAGE = (
+    os.getenv(
+        'ACCESS_DENIED_MESSAGE',
+        '⛔ Доступ к боту ограничен. Обратитесь к администратору.'
+    ).strip()
+    or '⛔ Доступ к боту ограничен. Обратитесь к администратору.'
+)
 
 # ID канала для отправки отчетов (опционально)
 REPORTS_CHANNEL_ID = os.getenv('REPORTS_CHANNEL_ID', '').strip()
@@ -88,5 +112,5 @@ else:
 
 
 def is_admin(user_id: int) -> bool:
-    """Проверка, является ли пользователь администратором"""
+    """Legacy: проверка только по ADMIN_USER_IDS из .env"""
     return user_id in ADMIN_IDS

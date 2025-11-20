@@ -308,8 +308,9 @@ CREATE TABLE material_movement_log (
 ## Безопасность
 
 ### Аутентификация
-- Проверка `ADMIN_USER_IDS` из .env
-- Функция `is_admin()` в config.py
+- Суперадмины задаются переменной `ADMIN_USER_IDS` в .env
+- `AdminManager` объединяет суперадминов и админов из БД
+- Управление доступом к функционалу через бот (разделы «Управление доступом» и «Управление администраторами»)
 
 ### Данные
 - Локальное хранение SQLite
@@ -370,4 +371,3 @@ CREATE TABLE material_movement_log (
 - Логи: `bot.log`
 - Systemd service: `isp_bot.service`
 - Restart script: `RESTART_BOT.sh`
-

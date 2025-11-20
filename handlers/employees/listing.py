@@ -20,8 +20,20 @@ async def show_employees_list(flow: "EmployeeFlow", update: Update, context: Con
         twisted_balance = emp.get("twisted_pair_balance", 0) or 0
         routers = await run_in_thread(flow.db.get_employee_routers, emp["id"])
         router_count = sum(r["quantity"] for r in routers)
-        if fiber_balance > 0 or twisted_balance > 0 or router_count > 0:
-            included.append((emp, fiber_balance, twisted_balance, routers, router_count))
+        snr_boxes = await run_in_thread(flow.db.get_employee_snr_boxes, emp["id"])
+        snr_count = sum(box["quantity"] for box in snr_boxes)
+        if fiber_balance > 0 or twisted_balance > 0 or router_count > 0 or snr_count > 0:
+            included.append(
+                (
+                    emp,
+                    fiber_balance,
+                    twisted_balance,
+                    routers,
+                    router_count,
+                    snr_boxes,
+                    snr_count,
+                )
+            )
 
     if not included:
         await update.message.reply_text(
@@ -34,7 +46,15 @@ async def show_employees_list(flow: "EmployeeFlow", update: Update, context: Con
 
     message_lines = ["📋 <b>Список сотрудников МОЛ</b>\n"]
 
-    for idx, (emp, fiber_balance, twisted_balance, routers, router_count) in enumerate(included, 1):
+    for idx, (
+        emp,
+        fiber_balance,
+        twisted_balance,
+        routers,
+        router_count,
+        snr_boxes,
+        snr_count,
+    ) in enumerate(included, 1):
         message_lines.append(f"{idx}. <b>{emp['full_name']}</b>")
         message_lines.append("   📦 Материалы:")
         message_lines.append(f"   • ВОЛС: {fiber_balance} м")
@@ -46,6 +66,13 @@ async def show_employees_list(flow: "EmployeeFlow", update: Update, context: Con
             for router in routers:
                 message_lines.append(
                     f"   • {router['router_name']}: {router['quantity']} шт."
+                )
+        message_lines.append(f"   🧰 SNR боксы: {snr_count} шт.")
+        if snr_boxes:
+            message_lines.append("   Модели боксов:")
+            for box in snr_boxes:
+                message_lines.append(
+                    f"   • {box['box_name']}: {box['quantity']} шт."
                 )
         message_lines.append("")
 

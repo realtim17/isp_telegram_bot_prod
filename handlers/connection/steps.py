@@ -7,11 +7,13 @@ from telegram.ext import ContextTypes, ConversationHandler
 from config import (
     SELECT_CONNECTION_TYPE, UPLOAD_PHOTOS, ENTER_ADDRESS, SELECT_ROUTER, 
     ENTER_ROUTER_QUANTITY_CONNECTION, ROUTER_ACCESS, ENTER_PORT, ENTER_FIBER, 
-    ENTER_TWISTED, CONTRACT_SIGNED, TELEGRAM_BOT_CONFIRM, SELECT_EMPLOYEES, CONNECTION_TYPES
+    ENTER_TWISTED, CONTRACT_SIGNED, TELEGRAM_BOT_CONFIRM, SELECT_SNR_BOX, 
+    CONNECTION_TYPES
 )
 from utils.keyboards import get_main_keyboard
 from handlers.connection.constants import MAX_PHOTOS, PHOTO_REQUIREMENTS
 from handlers.connection.cancellation import cancel_connection
+from handlers.connection.employees import start_employee_selection
 from utils.helpers import run_in_thread
 from handlers.connection.ui import (
     build_inline_keyboard,
@@ -36,7 +38,7 @@ async def new_connection_start(update: Update, context: ContextTypes.DEFAULT_TYP
     ])
     
     text = """
-🏢 <b>Шаг 1/12: Тип подключения</b>
+🏢 <b>Шаг 1/13: Тип подключения</b>
 
 Выберите тип подключения:
 
@@ -70,7 +72,7 @@ async def select_connection_type(update: Update, context: ContextTypes.DEFAULT_T
     text = f"""
 ✅ Тип подключения: <b>{type_name}</b>
 
-📸 <b>Шаг 2/12: Загрузка фотографий</b>
+📸 <b>Шаг 2/13: Загрузка фотографий</b>
 
 Загрузите фотографии с места подключения (до {MAX_PHOTOS} штук).
 После загрузки фото нажмите "Продолжить".
@@ -160,7 +162,7 @@ async def ask_address(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
     
     await query.edit_message_text(
         f"✅ Загружено фото: {photos_count}\n\n"
-        f"📍 <b>Шаг 3/12: Адрес подключения</b>\n\n"
+        f"📍 <b>Шаг 3/13: Адрес подключения</b>\n\n"
         f"Введите адрес подключения абонента:",
         parse_mode='HTML'
     )
@@ -220,9 +222,9 @@ async def enter_address(update: Update, context: ContextTypes.DEFAULT_TYPE, db) 
 
     # Показываем inline-клавиатуру
     if router_names:
-        message_text = f"✅ Адрес: {address}\n\n🌐 <b>Шаг 4/12: Модель роутера</b>\n\nВыберите роутер из списка или пропустите:"
+        message_text = f"✅ Адрес: {address}\n\n🌐 <b>Шаг 4/13: Модель роутера</b>\n\nВыберите роутер из списка или пропустите:"
     else:
-        message_text = f"✅ Адрес: {address}\n\n🌐 <b>Шаг 4/12: Модель роутера</b>\n\n⚠️ В системе нет зарегистрированных роутеров.\nВы можете пропустить этот шаг:"
+        message_text = f"✅ Адрес: {address}\n\n🌐 <b>Шаг 4/13: Модель роутера</b>\n\n⚠️ В системе нет зарегистрированных роутеров.\nВы можете пропустить этот шаг:"
     
     await update.message.reply_text(
         message_text,
@@ -254,7 +256,7 @@ async def select_router(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         
         await query.edit_message_text(
             f"⏭️ Роутер: пропущено\n\n"
-            f"🔐 <b>Шаг 6/12: Доступ на роутер</b>\n\n"
+            f"🔐 <b>Шаг 6/13: Доступ на роутер</b>\n\n"
             f"Подтвердите, что доступ на роутер открыт:",
             parse_mode='HTML'
         )
@@ -275,7 +277,7 @@ async def select_router(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     
     await query.edit_message_text(
         f"✅ Роутер: {router_name}\n\n"
-        f"📦 <b>Шаг 5/12: Количество роутеров</b>\n\n"
+        f"📦 <b>Шаг 5/13: Количество роутеров</b>\n\n"
         f"Введите количество роутеров (по умолчанию: 1):",
         parse_mode='HTML'
     )
@@ -326,7 +328,7 @@ async def enter_router_quantity_connection(update: Update, context: ContextTypes
         
         await update.message.reply_text(
             f"✅ Количество роутеров: {router_quantity}\n\n"
-            f"🔐 <b>Шаг 6/12: Доступ на роутер</b>\n\n"
+            f"🔐 <b>Шаг 6/13: Доступ на роутер</b>\n\n"
             f"Подтвердите, что доступ на роутер открыт:",
             reply_markup=ReplyKeyboardRemove(),
             parse_mode='HTML'
@@ -366,7 +368,7 @@ async def router_access_handler(update: Update, context: ContextTypes.DEFAULT_TY
     
     await query.edit_message_text(
         f"{status_text}\n\n"
-        f"🔌 <b>Шаг 7/12: Номер порта</b>\n\n"
+        f"🔌 <b>Шаг 7/13: Номер порта</b>\n\n"
         f"Введите номер порта или пропустите:",
         parse_mode='HTML'
     )
@@ -383,7 +385,7 @@ async def _prompt_fiber_input(message, status_text: str):
     """Вывести подсказку для ввода метража ВОЛС"""
     await message.reply_text(
         f"{status_text}\n\n"
-        f"📏 <b>Шаг 8/12: Метраж ВОЛС</b>\n\n"
+        f"📏 <b>Шаг 8/13: Метраж ВОЛС</b>\n\n"
         f"Введите количество метров ВОЛС (волоконно-оптической линии связи):",
         reply_markup=cancel_reply_keyboard(),
         parse_mode='HTML'
@@ -462,7 +464,7 @@ async def enter_fiber(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
         
         await update.message.reply_text(
             f"✅ ВОЛС: {fiber_meters} м\n\n"
-            f"📏 <b>Шаг 9/12: Метраж витой пары</b>\n\n"
+            f"📏 <b>Шаг 9/13: Метраж витой пары</b>\n\n"
             f"Введите количество метров витой пары:",
             parse_mode='HTML'
         )
@@ -507,7 +509,7 @@ async def enter_twisted(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         
         await update.message.reply_text(
             f"✅ Витая пара: {twisted_meters} м\n\n"
-            f"📄 <b>Шаг 10/12: Договор подписан</b>\n\n"
+            f"📄 <b>Шаг 10/13: Договор подписан</b>\n\n"
             f"Подтвердите, что договор подписан:",
             reply_markup=ReplyKeyboardRemove(),
             parse_mode='HTML'
@@ -547,7 +549,7 @@ async def contract_signed(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     
     await query.edit_message_text(
         f"✅ Договор подписан\n\n"
-        f"🤖 <b>Шаг 11/12: Телеграмм Бот</b>\n\n"
+        f"🤖 <b>Шаг 11/13: Телеграмм Бот</b>\n\n"
         f"Подтвердите, что абонентский Телеграмм Бот подключен:",
         reply_markup=reply_markup,
         parse_mode='HTML'
@@ -575,46 +577,45 @@ async def telegram_bot_confirm(update: Update, context: ContextTypes.DEFAULT_TYP
         context.user_data['connection_data']['telegram_bot_connected'] = False
         status_text = "⏭️ Пропущено"
     
-    # Получаем список сотрудников
-    employees = await run_in_thread(db.get_all_employees) or []
+    snr_names = await run_in_thread(db.get_all_snr_box_names) or []
     
-    if not employees:
-        await query.edit_message_text(
-            "⚠️ В системе нет ни одного сотрудника!\n\n"
-            "Обратитесь к администратору для добавления сотрудников.",
-            reply_markup=None
-        )
-        await query.message.reply_text(
-            "Выберите действие:",
-            reply_markup=get_main_keyboard()
-        )
-        return ConversationHandler.END
+    if not snr_names:
+        context.user_data['connection_data']['snr_box_model'] = '-'
+        return await start_employee_selection(update, context, db, pre_text=status_text)
     
-    # Создаем клавиатуру для выбора сотрудников
-    context.user_data['selected_employees'] = []
-    keyboard = []
-    
-    for emp in employees:
-        keyboard.append([InlineKeyboardButton(
-            f"☐ {emp['full_name']}", 
-            callback_data=f"emp_{emp['id']}"
-        )])
-    
-    keyboard.append([InlineKeyboardButton("✅ Готово", callback_data='employees_done')])
+    keyboard = [
+        [InlineKeyboardButton(f"🧰 {name}", callback_data=f"snr_box_{name}")]
+        for name in snr_names
+    ]
+    keyboard.append([InlineKeyboardButton("⏭️ Пропустить", callback_data='snr_skip')])
     reply_markup = build_inline_keyboard(keyboard)
     
     await query.edit_message_text(
         f"{status_text}\n\n"
-        f"👥 <b>Шаг 12/12: Выбор исполнителей</b>\n\n"
-        f"Выберите сотрудников, которые участвовали в подключении:\n"
-        f"(можно выбрать нескольких)",
+        f"🧰 <b>Шаг 12/13: SNR Оптический бокс</b>\n\n"
+        f"Выберите модель бокса или пропустите шаг:",
+        reply_markup=reply_markup,
         parse_mode='HTML'
     )
     
-    # Отправляем сообщение с inline-клавиатурой
-    await query.message.reply_text(
-        "Нажмите ✅ Готово после выбора:",
-        reply_markup=reply_markup
-    )
+    return SELECT_SNR_BOX
+
+
+async def select_snr_box(update: Update, context: ContextTypes.DEFAULT_TYPE, db) -> int:
+    """Обработка выбора SNR бокса"""
+    query = update.callback_query
+    await query.answer()
     
-    return SELECT_EMPLOYEES
+    if query.data == 'cancel_connection':
+        return await cancel_connection(update, context)
+    
+    context.user_data.setdefault('connection_data', {})
+    if query.data == 'snr_skip':
+        context.user_data['connection_data']['snr_box_model'] = '-'
+        snr_status = "⏭️ SNR бокс: <b>Пропущен</b>"
+    else:
+        box_name = query.data.replace('snr_box_', '', 1)
+        context.user_data['connection_data']['snr_box_model'] = box_name
+        snr_status = f"🧰 SNR бокс: <b>{box_name}</b>"
+    
+    return await start_employee_selection(update, context, db, pre_text=snr_status)
