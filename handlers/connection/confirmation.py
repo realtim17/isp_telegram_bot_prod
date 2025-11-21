@@ -179,6 +179,7 @@ async def confirm_connection(update: Update, context: ContextTypes.DEFAULT_TYPE,
     selected_employees = context.user_data.get('selected_employees', [])
     material_payer_id = context.user_data.get('material_payer_id')
     router_payer_id = context.user_data.get('router_payer_id')
+    snr_box_payer_id = context.user_data.get('snr_box_payer_id')
     user_id = update.effective_user.id
     
     router_quantity = data.get('router_quantity', 1)
