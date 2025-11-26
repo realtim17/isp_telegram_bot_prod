@@ -8,7 +8,8 @@ from config import (
     SELECT_CONNECTION_TYPE, UPLOAD_PHOTOS, ENTER_ADDRESS, SELECT_ROUTER,
     ENTER_ROUTER_QUANTITY_CONNECTION, ROUTER_ACCESS, ENTER_PORT, ENTER_FIBER,
     ENTER_TWISTED, CONTRACT_SIGNED, TELEGRAM_BOT_CONFIRM, SELECT_EMPLOYEES, 
-    SELECT_MATERIAL_PAYER, SELECT_ROUTER_PAYER, SELECT_SNR_BOX, SELECT_SNR_PAYER, CONFIRM
+    SELECT_MATERIAL_PAYER, SELECT_ROUTER_PAYER, SELECT_SNR_BOX, SELECT_SNR_PAYER, CONFIRM,
+    SELECT_ONU_ACTION, ENTER_ONU_QUANTITY, SELECT_MEDIA_ACTION, ENTER_MEDIA_QUANTITY
 )
 
 # Импорт обработчиков шагов
@@ -26,7 +27,11 @@ from handlers.connection.steps import (
     enter_twisted,
     contract_signed,
     telegram_bot_confirm,
-    select_snr_box
+    select_snr_box,
+    select_onu_connection,
+    enter_onu_quantity_connection,
+    select_media_connection,
+    enter_media_quantity_connection
 )
 
 # Импорт обработчиков выбора исполнителей
@@ -64,6 +69,18 @@ def build_connection_conversation(db) -> ConversationHandler:
     
     async def select_snr_box_wrapper(update, context):
         return await select_snr_box(update, context, db)
+    
+    async def select_onu_wrapper(update, context):
+        return await select_onu_connection(update, context, db)
+    
+    async def enter_onu_quantity_wrapper(update, context):
+        return await enter_onu_quantity_connection(update, context, db)
+    
+    async def select_media_wrapper(update, context):
+        return await select_media_connection(update, context, db)
+    
+    async def enter_media_quantity_wrapper(update, context):
+        return await enter_media_quantity_connection(update, context, db)
     
     async def select_employee_toggle_wrapper(update, context):
         return await select_employee_toggle(update, context, db)
@@ -127,6 +144,18 @@ def build_connection_conversation(db) -> ConversationHandler:
             ],
             SELECT_SNR_BOX: [
                 CallbackQueryHandler(select_snr_box_wrapper, pattern='^(snr_box_.*|snr_skip|cancel_connection)$')
+            ],
+            SELECT_ONU_ACTION: [
+                CallbackQueryHandler(select_onu_wrapper, pattern='^(conn_onu_.*|conn_onu_skip|cancel_connection)$')
+            ],
+            ENTER_ONU_QUANTITY: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, enter_onu_quantity_wrapper)
+            ],
+            SELECT_MEDIA_ACTION: [
+                CallbackQueryHandler(select_media_wrapper, pattern='^(conn_media_.*|conn_media_skip|cancel_connection)$')
+            ],
+            ENTER_MEDIA_QUANTITY: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, enter_media_quantity_wrapper)
             ],
             SELECT_EMPLOYEES: [
                 CallbackQueryHandler(select_employee_toggle_wrapper, pattern='^(emp_.*|employees_done)$'),

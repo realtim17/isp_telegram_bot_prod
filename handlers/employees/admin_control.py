@@ -26,7 +26,8 @@ async def show_admin_menu(flow: "EmployeeFlow", update: Update, context: Context
     """Показать меню управления администраторами"""
     if not flow.admin_manager:
         await _admins_not_configured(update)
-        return await flow.manage_employees_start(update, context)
+        from .start import return_to_manage_menu
+        return await return_to_manage_menu(flow, update, context)
 
     entries = flow.admin_manager.list_entries()
     managed_count = sum(1 for entry in entries if entry.get("source") == "db")
@@ -54,11 +55,13 @@ async def handle_admin_action(flow: "EmployeeFlow", update: Update, context: Con
 
     if data == "back_to_manage":
         await query.answer()
-        return await flow.manage_employees_start(update, context)
+        from .start import return_to_manage_menu
+        return await return_to_manage_menu(flow, update, context)
 
     if not flow.admin_manager:
         await _admins_not_configured(update)
-        return await flow.manage_employees_start(update, context)
+        from .start import return_to_manage_menu
+        return await return_to_manage_menu(flow, update, context)
 
     if data in {"admin_menu", "admin_back_to_menu"}:
         await query.answer()
@@ -91,7 +94,8 @@ async def enter_admin_user_id(flow: "EmployeeFlow", update: Update,
     """Обработка ввода ID администратора"""
     if not flow.admin_manager:
         await update.message.reply_text("⚠️ Управление администраторами недоступно.")
-        return await flow.manage_employees_start(update, context)
+        from .start import return_to_manage_menu
+        return await return_to_manage_menu(flow, update, context)
 
     text = (update.message.text or "").strip()
     if text.lower() in {"отмена", "cancel"}:

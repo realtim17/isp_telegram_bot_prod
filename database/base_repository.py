@@ -19,6 +19,10 @@ class BaseRepository:
         """Получить подключение к БД с row_factory"""
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
+        # Включаем ссылочную целостность и базовые настройки под конкуренцию
+        conn.execute("PRAGMA foreign_keys = ON")
+        conn.execute("PRAGMA journal_mode = WAL")
+        conn.execute("PRAGMA busy_timeout = 15000")
         return conn
     
     def execute_query(
@@ -94,4 +98,3 @@ class BaseRepository:
         finally:
             if conn:
                 conn.close()
-

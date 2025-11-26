@@ -47,6 +47,15 @@ async def show_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE, 
     material_payer_id = context.user_data.get('material_payer_id')
     router_payer_id = context.user_data.get('router_payer_id')
     snr_box_payer_id = context.user_data.get('snr_box_payer_id')
+    # ONU/медиаконверторы по умолчанию списываются с первого исполнителя
+    onu_payer_id = context.user_data.get('onu_payer_id')
+    media_payer_id = context.user_data.get('media_payer_id')
+    if not onu_payer_id and selected_employees:
+        onu_payer_id = selected_employees[0]
+        context.user_data['onu_payer_id'] = onu_payer_id
+    if not media_payer_id and selected_employees:
+        media_payer_id = selected_employees[0]
+        context.user_data['media_payer_id'] = media_payer_id
     snr_box_payer_id = context.user_data.get('snr_box_payer_id')
     snr_box_payer_id = context.user_data.get('snr_box_payer_id')
     
@@ -79,14 +88,40 @@ async def show_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE, 
                 employee_map[snr_box_payer_id] = snr_payer
         if snr_payer:
             payer_info += f"\n🧰 <b>SNR бокс списывается с:</b> {snr_payer['full_name']}"
+
+    onu_payer_id = context.user_data.get('onu_payer_id')
+    media_payer_id = context.user_data.get('media_payer_id')
+
+    if onu_payer_id:
+        onu_payer = employee_map.get(onu_payer_id)
+        if not onu_payer:
+            onu_payer = await run_in_thread(db.get_employee_by_id, onu_payer_id)
+            if onu_payer:
+                employee_map[onu_payer_id] = onu_payer
+        if onu_payer:
+            onu_quantity = data.get('onu_quantity', 0) or 0
+            quantity_text = f" ({int(onu_quantity)} шт.)" if onu_quantity else ""
+            payer_info += f"\n🔌 <b>ONU списываются с:</b> {onu_payer['full_name']}{quantity_text}"
+
+    if media_payer_id:
+        media_payer = employee_map.get(media_payer_id)
+        if not media_payer:
+            media_payer = await run_in_thread(db.get_employee_by_id, media_payer_id)
+            if media_payer:
+                employee_map[media_payer_id] = media_payer
+        if media_payer:
+            media_quantity = data.get('media_converter_quantity', 0) or 0
+            quantity_text = f" ({int(media_quantity)} шт.)" if media_quantity else ""
+            payer_info += f"\n🔄 <b>Медиаконверторы списываются с:</b> {media_payer['full_name']}{quantity_text}"
     
     # Формируем отображение роутера
     router_model = data.get('router_model', '-')
     router_quantity = data.get('router_quantity', 1)
-    snr_box_model = data.get('snr_box_model', '-')
-    snr_box_model = data.get('snr_box_model', '-')
-    snr_box_model = data.get('snr_box_model', '-')
     snr_box_model = data.get('snr_box_model', '-') or '-'
+    onu_model = data.get('onu_model', '-') or '-'
+    onu_quantity = data.get('onu_quantity', 0) or 0
+    media_model = data.get('media_converter_model', '-') or '-'
+    media_quantity = data.get('media_converter_quantity', 0) or 0
     
     if router_model == '-' or not router_model:
         router_display = "-"
@@ -96,6 +131,20 @@ async def show_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE, 
             router_display += f" ({router_quantity} шт.)"
     
     snr_display = snr_box_model if snr_box_model and snr_box_model != '-' else "-"
+    
+    if onu_model == '-' or not onu_model:
+        onu_display = "-"
+    else:
+        onu_display = onu_model
+        if onu_quantity > 0:
+            onu_display += f" ({onu_quantity} шт.)"
+    
+    if media_model == '-' or not media_model:
+        media_display = "-"
+    else:
+        media_display = media_model
+        if media_quantity > 0:
+            media_display += f" ({media_quantity} шт.)"
     
     # Формируем отображение порта
     port = data.get('port', '-')
@@ -120,6 +169,8 @@ async def show_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE, 
 <b>Тип подключения:</b> {type_name}
 <b>Модель роутера:</b> {router_display}
 <b>SNR бокс:</b> {snr_display}
+<b>ONU абон.терминал:</b> {onu_display}
+<b>Медиаконвертор:</b> {media_display}
 <b>Доступ на роутер:</b> {router_access_status}
 <b>Договор:</b> {contract_status}
 <b>Телеграмм Бот:</b> {telegram_bot_status}
@@ -182,6 +233,11 @@ async def confirm_connection(update: Update, context: ContextTypes.DEFAULT_TYPE,
     snr_box_payer_id = context.user_data.get('snr_box_payer_id')
     user_id = update.effective_user.id
     
+    onu_model = data.get('onu_model', '-')
+    onu_quantity = data.get('onu_quantity', 0) or 0
+    media_model = data.get('media_converter_model', '-')
+    media_quantity = data.get('media_converter_quantity', 0) or 0
+    
     router_quantity = data.get('router_quantity', 1)
     contract_signed = data.get('contract_signed', False)
     router_access = data.get('router_access', False)
@@ -204,41 +260,18 @@ async def confirm_connection(update: Update, context: ContextTypes.DEFAULT_TYPE,
         router_quantity=router_quantity,
         contract_signed=contract_signed,
         router_access=router_access,
-        telegram_bot_connected=telegram_bot_connected
+        telegram_bot_connected=telegram_bot_connected,
+        router_payer_id=router_payer_id,
+        snr_box_payer_id=snr_box_payer_id,
+        onu_model=onu_model,
+        onu_quantity=onu_quantity,
+        onu_payer_id=onu_payer_id,
+        media_converter_model=media_model,
+        media_converter_quantity=media_quantity,
+        media_payer_id=media_payer_id,
     )
     
     if connection_id:
-        # Списываем роутер, если указан плательщик и роутер не пропущен
-        router_model = data.get('router_model', '-')
-        if router_payer_id and router_model != '-' and router_model:
-            success = await run_in_thread(
-                db.deduct_router_from_employee,
-                router_payer_id, 
-                router_model, 
-                router_quantity,
-                connection_id=connection_id,
-                created_by=user_id
-            )
-            if success:
-                logger.info(f"Роутер '{router_model}' x{router_quantity} списан с сотрудника ID {router_payer_id}")
-            else:
-                logger.warning(f"Не удалось списать роутер '{router_model}' x{router_quantity} с сотрудника ID {router_payer_id}")
-        
-        # Списываем SNR бокс, если выбран
-        if snr_box_payer_id and snr_box_model and snr_box_model != '-':
-            snr_success = await run_in_thread(
-                db.deduct_snr_box_from_employee,
-                snr_box_payer_id,
-                snr_box_model,
-                1,
-                connection_id=connection_id,
-                created_by=user_id
-            )
-            if snr_success:
-                logger.info("SNR бокс '%s' списан с сотрудника ID %s", snr_box_model, snr_box_payer_id)
-            else:
-                logger.warning("Не удалось списать SNR бокс '%s' с сотрудника ID %s", snr_box_model, snr_box_payer_id)
-        
         # Отправляем подтверждение
         await query.edit_message_text(
             f"✅ <b>Отчет успешно создан!</b>\n\n"

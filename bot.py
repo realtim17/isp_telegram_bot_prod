@@ -37,7 +37,7 @@ from handlers.commands import (
 )
 
 # Импорт клавиатуры
-from utils.keyboards import get_main_keyboard
+from utils.keyboards import get_main_keyboard, set_main_keyboard_admin_mode
 from utils.helpers import ensure_user_authorized
 from utils.access import AccessManager
 from utils.admins import AdminManager
@@ -82,7 +82,7 @@ def main():
     )
     
     # Фильтр для кнопок главного меню
-    menu_buttons_filter = filters.Regex('^(📝 Новое подключение|📊 Сводный отчет|👥 Управление сотрудниками|ℹ️ Помощь)$')
+    menu_buttons_filter = filters.Regex('^(📝 Новое подключение|📊 Сводный отчет|👥 Управление сотрудниками|📦 Материалы и оборудование|ℹ️ Помощь)$')
     
     # Обертки для передачи db в обработчики отчетов и сотрудников
     async def report_start_wrapper(update, context):
@@ -104,7 +104,7 @@ def main():
             MessageHandler(filters.Regex('^📊 Сводный отчет$'), report_start_wrapper)
         ],
         states={
-            SELECT_REPORT_EMPLOYEE: [CallbackQueryHandler(report_select_period_wrapper, pattern='^(rep_emp_|report_cancel)')],
+            SELECT_REPORT_EMPLOYEE: [CallbackQueryHandler(report_select_period_wrapper, pattern='^(rep_emp_|rep_all|report_cancel)')],
             SELECT_REPORT_PERIOD: [CallbackQueryHandler(report_generate_wrapper, pattern='^(period_|period_cancel)')],
             ENTER_REPORT_CUSTOM_START: [MessageHandler(text_input_filter, report_enter_custom_start)],
             ENTER_REPORT_CUSTOM_END: [MessageHandler(text_input_filter, report_custom_end_wrapper)]
@@ -125,6 +125,11 @@ def main():
     
     # Глобальный guard доступа
     async def authorization_guard(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user = update.effective_user
+        # Фиксируем флаг администратора для дальнейших вызовов get_main_keyboard
+        is_admin = admin_manager.is_admin(user.id) if user else False
+        set_main_keyboard_admin_mode(is_admin)
+
         if await ensure_user_authorized(update, access_manager):
             return
         raise ApplicationHandlerStop

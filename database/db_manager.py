@@ -15,6 +15,8 @@ from database.repositories.snr_box_repository import SNRBoxRepository
 from database.repositories.connection_repository import ConnectionRepository
 from database.repositories.access_repository import AccessRepository
 from database.repositories.admin_repository import AdminRepository
+from database.repositories.onu_repository import ONURepository
+from database.repositories.media_converter_repository import MediaConverterRepository
 
 logger = logging.getLogger(__name__)
 
@@ -41,22 +43,60 @@ class Database:
         self.snr_repo = SNRBoxRepository(self.db_path)
         self.access_repo = AccessRepository(self.db_path)
         self.admin_repo = AdminRepository(self.db_path)
+        self.onu_repo = ONURepository(self.db_path)
+        self.media_repo = MediaConverterRepository(self.db_path)
         
-        # Создаем таблицы
+        # Создаем/обновляем схему
         self.create_tables()
     
     def get_connection(self) -> sqlite3.Connection:
         """Получить подключение к БД"""
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA foreign_keys = ON")
+        conn.execute("PRAGMA journal_mode = WAL")
+        conn.execute("PRAGMA busy_timeout = 15000")
         return conn
     
     def create_tables(self):
-        """Создать таблицы БД"""
+        """Применить миграции схемы атомарно"""
         conn = self.get_connection()
-        cursor = conn.cursor()
-        
-        # Таблица сотрудников
+        try:
+            cursor = conn.cursor()
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS schema_migrations (
+                    version INTEGER PRIMARY KEY
+                )
+            """)
+            cursor.execute("SELECT COALESCE(MAX(version), 0) AS v FROM schema_migrations")
+            current_version = cursor.fetchone()[0] or 0
+            
+            migrations = [
+                self._migration_v1,
+                self._migration_v2,
+            ]
+            
+            if current_version >= len(migrations):
+                logger.info("Миграции не требуются, текущая версия схемы: %s", current_version)
+                return
+            
+            conn.execute("BEGIN")
+            for idx, migration in enumerate(migrations, start=1):
+                if idx > current_version:
+                    migration(cursor)
+                    cursor.execute("INSERT INTO schema_migrations (version) VALUES (?)", (idx,))
+                    logger.info("Применена миграция %s", idx)
+            conn.commit()
+            logger.info("Схема обновлена до версии %s", len(migrations))
+        except Exception as exc:
+            conn.rollback()
+            logger.error("Ошибка при применении миграций: %s", exc)
+            raise
+        finally:
+            conn.close()
+
+    def _migration_v1(self, cursor: sqlite3.Cursor) -> None:
+        """Базовая схема + все текущие поля"""
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS employees (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -66,21 +106,15 @@ class Database:
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
-        
-        # Добавляем поля балансов в существующую таблицу (если их нет)
         try:
             cursor.execute("ALTER TABLE employees ADD COLUMN fiber_balance REAL DEFAULT 0")
-            logger.info("Добавлено поле fiber_balance в таблицу employees")
         except sqlite3.OperationalError:
             pass
-        
         try:
             cursor.execute("ALTER TABLE employees ADD COLUMN twisted_pair_balance REAL DEFAULT 0")
-            logger.info("Добавлено поле twisted_pair_balance в таблицу employees")
         except sqlite3.OperationalError:
             pass
-        
-        # Таблица подключений
+
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS connections (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -95,55 +129,31 @@ class Database:
                 created_by INTEGER NOT NULL
             )
         """)
-        
-        # Добавляем поле connection_type в существующую таблицу (если его нет)
         try:
             cursor.execute("ALTER TABLE connections ADD COLUMN connection_type TEXT NOT NULL DEFAULT 'mkd'")
-            logger.info("Добавлено поле connection_type в таблицу connections")
         except sqlite3.OperationalError:
-            # Поле уже существует
             pass
-        
-        # Добавляем поле router_quantity в существующую таблицу (если его нет)
         try:
             cursor.execute("ALTER TABLE connections ADD COLUMN router_quantity INTEGER DEFAULT 1")
-            logger.info("Добавлено поле router_quantity в таблицу connections")
         except sqlite3.OperationalError:
-            # Поле уже существует
             pass
-        
-        # Добавляем поле snr_box_model
         try:
             cursor.execute("ALTER TABLE connections ADD COLUMN snr_box_model TEXT NOT NULL DEFAULT '-'")
-            logger.info("Добавлено поле snr_box_model в таблицу connections")
         except sqlite3.OperationalError:
             pass
-        
-        # Добавляем поле contract_signed в существующую таблицу (если его нет)
         try:
             cursor.execute("ALTER TABLE connections ADD COLUMN contract_signed INTEGER DEFAULT 0")
-            logger.info("Добавлено поле contract_signed в таблицу connections")
         except sqlite3.OperationalError:
-            # Поле уже существует
             pass
-        
-        # Добавляем поле router_access в существующую таблицу (если его нет)
         try:
             cursor.execute("ALTER TABLE connections ADD COLUMN router_access INTEGER DEFAULT 0")
-            logger.info("Добавлено поле router_access в таблицу connections")
         except sqlite3.OperationalError:
-            # Поле уже существует
             pass
-        
-        # Добавляем поле telegram_bot_connected в существующую таблицу (если его нет)
         try:
             cursor.execute("ALTER TABLE connections ADD COLUMN telegram_bot_connected INTEGER DEFAULT 0")
-            logger.info("Добавлено поле telegram_bot_connected в таблицу connections")
         except sqlite3.OperationalError:
-            # Поле уже существует
             pass
-        
-        # Таблица связи подключений и сотрудников (многие ко многим)
+
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS connection_employees (
                 connection_id INTEGER NOT NULL,
@@ -153,18 +163,15 @@ class Database:
                 FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
             )
         """)
-        
         cursor.execute("""
             CREATE INDEX IF NOT EXISTS idx_connections_created_at
             ON connections (created_at)
         """)
-        
         cursor.execute("""
             CREATE INDEX IF NOT EXISTS idx_connection_employees_employee
             ON connection_employees (employee_id)
         """)
-        
-        # Таблица фотографий подключений
+
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS connection_photos (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -175,16 +182,11 @@ class Database:
                 FOREIGN KEY (connection_id) REFERENCES connections(id) ON DELETE CASCADE
             )
         """)
-        
-        # Добавляем поле photo_category в существующую таблицу (если его нет)
         try:
             cursor.execute("ALTER TABLE connection_photos ADD COLUMN photo_category TEXT NOT NULL DEFAULT 'other'")
-            logger.info("Добавлено поле photo_category в таблицу connection_photos")
         except sqlite3.OperationalError:
-            # Поле уже существует
             pass
-        
-        # Таблица роутеров сотрудников
+
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS employee_routers (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -195,8 +197,7 @@ class Database:
                 FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
             )
         """)
-        
-        # Таблица SNR оптических боксов
+
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS employee_snr_boxes (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -207,8 +208,29 @@ class Database:
                 FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
             )
         """)
-        
-        # Таблица логов движения материалов и роутеров
+
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS employee_onu (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                employee_id INTEGER NOT NULL,
+                device_name TEXT NOT NULL,
+                quantity INTEGER NOT NULL DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
+            )
+        """)
+
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS employee_media_converters (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                employee_id INTEGER NOT NULL,
+                device_name TEXT NOT NULL,
+                quantity INTEGER NOT NULL DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
+            )
+        """)
+
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS material_movement_log (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -226,7 +248,6 @@ class Database:
             )
         """)
 
-        # Таблица разрешенных пользователей бота
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS bot_access (
                 user_id INTEGER PRIMARY KEY,
@@ -244,15 +265,18 @@ class Database:
                 created_by INTEGER
             )
         """)
-        
+
         cursor.execute("""
             CREATE INDEX IF NOT EXISTS idx_material_movement_employee_created
             ON material_movement_log (employee_id, created_at)
         """)
-        
-        conn.commit()
-        conn.close()
-        logger.info("Таблицы БД созданы успешно")
+
+    def _migration_v2(self, cursor: sqlite3.Cursor) -> None:
+        """Индекс для ускорения выборок по connection_id в логе материалов"""
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_material_movement_connection
+            ON material_movement_log (connection_id)
+        """)
     
     # ==================== ЛОГИРОВАНИЕ ДВИЖЕНИЙ ====================
     
@@ -404,6 +428,44 @@ class Database:
     
     def get_all_snr_box_names(self) -> List[str]:
         return self.snr_repo.get_all_names()
+
+    # ==================== ONU ====================
+    def add_onu_to_employee(self, employee_id: int, device_name: str, quantity: int,
+                            created_by: Optional[int] = None) -> bool:
+        return self.onu_repo.add_onu(employee_id, device_name, quantity, created_by)
+
+    def deduct_onu_from_employee(self, employee_id: int, device_name: str, quantity: int = 1,
+                                 connection_id: Optional[int] = None,
+                                 created_by: Optional[int] = None) -> bool:
+        return self.onu_repo.deduct_onu(employee_id, device_name, quantity, connection_id, created_by)
+
+    def get_employee_onu(self, employee_id: int) -> List[Dict]:
+        return self.onu_repo.get_onu(employee_id)
+
+    def get_onu_quantity(self, employee_id: int, device_name: str) -> int:
+        return self.onu_repo.get_quantity(employee_id, device_name)
+
+    def get_all_onu_names(self) -> List[str]:
+        return self.onu_repo.get_all_names()
+
+    # ==================== Медиаконверторы ====================
+    def add_media_converter_to_employee(self, employee_id: int, device_name: str, quantity: int,
+                                        created_by: Optional[int] = None) -> bool:
+        return self.media_repo.add_converter(employee_id, device_name, quantity, created_by)
+
+    def deduct_media_converter_from_employee(self, employee_id: int, device_name: str, quantity: int = 1,
+                                             connection_id: Optional[int] = None,
+                                             created_by: Optional[int] = None) -> bool:
+        return self.media_repo.deduct_converter(employee_id, device_name, quantity, connection_id, created_by)
+
+    def get_employee_media_converters(self, employee_id: int) -> List[Dict]:
+        return self.media_repo.get_converters(employee_id)
+
+    def get_media_converter_quantity(self, employee_id: int, device_name: str) -> int:
+        return self.media_repo.get_quantity(employee_id, device_name)
+
+    def get_all_media_converter_names(self) -> List[str]:
+        return self.media_repo.get_all_names()
     
     def get_employee_movements(self, employee_id: int, start_date: datetime, 
                               end_date: datetime) -> List[Dict]:
@@ -428,13 +490,21 @@ class Database:
         router_quantity: int = 1,
         contract_signed: bool = False,
         router_access: bool = False,
-        telegram_bot_connected: bool = False
+        telegram_bot_connected: bool = False,
+        router_payer_id: Optional[int] = None,
+        snr_box_payer_id: Optional[int] = None,
+        onu_model: str = '-',
+        onu_quantity: int = 0,
+        onu_payer_id: Optional[int] = None,
+        media_converter_model: str = '-',
+        media_converter_quantity: int = 0,
+        media_payer_id: Optional[int] = None,
     ) -> Optional[int]:
         """Создать новое подключение и списать материалы с указанного сотрудника
         
         Args:
             material_payer_id: ID сотрудника, с которого списывать материалы.
-                              Если None, материалы списываются поровну со всех.
+            Если None, материалы списываются поровну со всех.
         """
         conn = None
         try:
@@ -491,6 +561,61 @@ class Database:
                         raise RuntimeError(
                             f"Не удалось списать материалы с сотрудника ID {emp_id}"
                         )
+
+            # Списываем оборудование в рамках той же транзакции
+            if router_payer_id and router_model and router_model != '-' and router_quantity > 0:
+                if not self.routers_repo.deduct_router(
+                    router_payer_id,
+                    router_model,
+                    router_quantity,
+                    connection_id,
+                    created_by,
+                    connection=conn,
+                ):
+                    raise RuntimeError(
+                        f"Не удалось списать роутер '{router_model}' x{router_quantity} с сотрудника ID {router_payer_id}"
+                    )
+
+            if snr_box_payer_id and snr_box_model and snr_box_model != '-':
+                if not self.snr_repo.deduct_box(
+                    snr_box_payer_id,
+                    snr_box_model,
+                    1,
+                    connection_id,
+                    created_by,
+                    connection=conn,
+                ):
+                    raise RuntimeError(
+                        f"Не удалось списать SNR бокс '{snr_box_model}' с сотрудника ID {snr_box_payer_id}"
+                    )
+
+            if onu_model and onu_model != '-' and onu_quantity > 0 and employee_ids:
+                payer = onu_payer_id or employee_ids[0]
+                if not self.onu_repo.deduct_onu(
+                    payer,
+                    onu_model,
+                    onu_quantity,
+                    connection_id,
+                    created_by,
+                    connection=conn,
+                ):
+                    raise RuntimeError(
+                        f"Не удалось списать ONU '{onu_model}' x{onu_quantity} с сотрудника ID {payer}"
+                    )
+
+            if media_converter_model and media_converter_model != '-' and media_converter_quantity > 0 and employee_ids:
+                payer = media_payer_id or employee_ids[0]
+                if not self.media_repo.deduct_converter(
+                    payer,
+                    media_converter_model,
+                    media_converter_quantity,
+                    connection_id,
+                    created_by,
+                    connection=conn,
+                ):
+                    raise RuntimeError(
+                        f"Не удалось списать медиаконвертор '{media_converter_model}' x{media_converter_quantity} с сотрудника ID {payer}"
+                    )
             
             for idx, photo_id in enumerate(photo_file_ids):
                 cursor.execute("""
@@ -523,101 +648,21 @@ class Database:
         start_date: Optional[datetime] = None,
         end_date: Optional[datetime] = None
     ) -> Tuple[List[Dict], Dict]:
-        """
-        Получить отчет по сотруднику за период
-        
-        Args:
-            employee_id: ID сотрудника
-            days: Количество дней (None = все время)
-            start_date: Начало периода (приоритетнее параметра days)
-            end_date: Конец периода (используется вместе со start_date)
-        
-        Returns:
-            Tuple: (список подключений, итоговая статистика)
-        """
-        conn = self.get_connection()
-        cursor = conn.cursor()
-        
-        date_condition = ""
-        params = [employee_id]
-        if start_date and end_date:
-            date_condition = "AND c.created_at BETWEEN ? AND ?"
-            params.append(start_date.strftime("%Y-%m-%d %H:%M:%S"))
-            params.append(end_date.strftime("%Y-%m-%d %H:%M:%S"))
-        elif start_date:
-            date_condition = "AND c.created_at >= ?"
-            params.append(start_date.strftime("%Y-%m-%d %H:%M:%S"))
-        elif days is not None:
-            date_limit = datetime.now() - timedelta(days=days)
-            date_condition = "AND c.created_at >= ?"
-            params.append(date_limit.strftime("%Y-%m-%d %H:%M:%S"))
-        
-        query = f"""
-            SELECT 
-                c.id,
-                c.connection_type,
-                c.address,
-                c.router_model,
-                c.port,
-                c.fiber_meters,
-                c.twisted_pair_meters,
-                c.created_at,
-                COUNT(DISTINCT ce_all.employee_id) as employee_count
-            FROM connections c
-            JOIN connection_employees ce_target 
-                ON ce_target.connection_id = c.id AND ce_target.employee_id = ?
-            JOIN connection_employees ce_all 
-                ON ce_all.connection_id = c.id
-            WHERE 1=1
-            {date_condition}
-            GROUP BY c.id
-            ORDER BY c.created_at DESC
-        """
-        
-        cursor.execute(query, params)
-        rows = cursor.fetchall()
-        
-        connection_ids = [row['id'] for row in rows]
-        employees_map: Dict[int, List[str]] = {}
-        
-        if connection_ids:
-            placeholders = ",".join("?" for _ in connection_ids)
-            cursor.execute(f"""
-                SELECT ce.connection_id, e.full_name
-                FROM connection_employees ce
-                JOIN employees e ON e.id = ce.employee_id
-                WHERE ce.connection_id IN ({placeholders})
-                ORDER BY ce.connection_id, e.full_name
-            """, connection_ids)
-            
-            for emp_row in cursor.fetchall():
-                employees_map.setdefault(emp_row['connection_id'], []).append(emp_row['full_name'])
-        
-        connections = []
-        total_fiber = 0.0
-        total_twisted = 0.0
-        
-        for row in rows:
-            conn_dict = dict(row)
-            emp_count = max(conn_dict['employee_count'], 1)
-            
-            conn_dict['employee_fiber_meters'] = round(conn_dict['fiber_meters'] / emp_count, 2)
-            conn_dict['employee_twisted_pair_meters'] = round(conn_dict['twisted_pair_meters'] / emp_count, 2)
-            conn_dict['all_employees'] = employees_map.get(conn_dict['id'], [])
-            
-            connections.append(conn_dict)
-            total_fiber += conn_dict['employee_fiber_meters']
-            total_twisted += conn_dict['employee_twisted_pair_meters']
-        
-        conn.close()
-        
-        stats = {
-            'total_connections': len(connections),
-            'total_fiber_meters': round(total_fiber, 2),
-            'total_twisted_pair_meters': round(total_twisted, 2)
-        }
-        
-        return connections, stats
+        return self.connections_repo.get_employee_report(
+            employee_id=employee_id,
+            days=days,
+            start_date=start_date,
+            end_date=end_date,
+        )
+
+    def get_global_report(
+        self,
+        days: Optional[int] = None,
+        start_date: Optional[datetime] = None,
+        end_date: Optional[datetime] = None
+    ) -> Tuple[List[Dict], Dict]:
+        """Получить общий отчет по всем сотрудникам за период"""
+        return self.connections_repo.get_global_report(days=days, start_date=start_date, end_date=end_date)
     
     def get_all_connections_count(self) -> int:
         """Получить общее количество подключений"""

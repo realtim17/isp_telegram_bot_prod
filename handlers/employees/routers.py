@@ -25,9 +25,9 @@ async def select_employee_for_router(
     await query.answer()
 
     if query.data == "back_to_manage":
-        from .start import manage_employees_start
+        from .start import return_to_manage_menu
 
-        return await manage_employees_start(flow, update, context)
+        return await return_to_manage_menu(flow, update, context)
 
     emp_id = int(query.data.split("_")[-1])
     context.user_data["selected_employee_id"] = emp_id
@@ -313,3 +313,5 @@ async def confirm_router_operation(
     context.user_data.clear()
     await query.message.reply_text("Выберите действие:", reply_markup=get_main_keyboard())
     return ConversationHandler.END
+
+

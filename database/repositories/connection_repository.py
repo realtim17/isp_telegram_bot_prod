@@ -13,78 +13,6 @@ logger = logging.getLogger(__name__)
 class ConnectionRepository(BaseRepository):
     """Репозиторий для управления подключениями"""
     
-    def create(
-        self,
-        connection_type: str,
-        address: str,
-        router_model: str,
-        snr_box_model: str,
-        port: str,
-        fiber_meters: float,
-        twisted_pair_meters: float,
-        created_by: int,
-        router_quantity: int = 1,
-        contract_signed: bool = False,
-        router_access: bool = False,
-        telegram_bot_connected: bool = False
-    ) -> Optional[int]:
-        """Создать новое подключение"""
-        try:
-            conn = self.get_connection()
-            cursor = conn.cursor()
-            
-            # Создаем запись подключения
-            cursor.execute("""
-                INSERT INTO connections 
-                (connection_type, address, router_model, snr_box_model, port, fiber_meters, 
-                 twisted_pair_meters, created_by, router_quantity, contract_signed, 
-                 router_access, telegram_bot_connected)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (
-                connection_type, address, router_model, snr_box_model, port, fiber_meters,
-                twisted_pair_meters, created_by, router_quantity,
-                1 if contract_signed else 0,
-                1 if router_access else 0,
-                1 if telegram_bot_connected else 0
-            ))
-            
-            connection_id = cursor.lastrowid
-            conn.commit()
-            conn.close()
-            
-            logger.info(f"Создано подключение ID: {connection_id}")
-            return connection_id
-        except Exception as e:
-            logger.error(f"Ошибка при создании подключения: {e}")
-            return None
-    
-    def link_employees(self, connection_id: int, employee_ids: List[int]) -> bool:
-        """Связать сотрудников с подключением"""
-        try:
-            params_list = [(connection_id, emp_id) for emp_id in employee_ids]
-            return self.execute_many("""
-                INSERT INTO connection_employees (connection_id, employee_id)
-                VALUES (?, ?)
-            """, params_list)
-        except Exception as e:
-            logger.error(f"Ошибка при связывании сотрудников: {e}")
-            return False
-    
-    def save_photos(self, connection_id: int, photo_file_ids: List[str]) -> bool:
-        """Сохранить фотографии подключения"""
-        try:
-            params_list = [
-                (connection_id, photo_id, 'general', idx)
-                for idx, photo_id in enumerate(photo_file_ids)
-            ]
-            return self.execute_many("""
-                INSERT INTO connection_photos (connection_id, photo_file_id, photo_category, photo_order)
-                VALUES (?, ?, ?, ?)
-            """, params_list)
-        except Exception as e:
-            logger.error(f"Ошибка при сохранении фотографий: {e}")
-            return False
-    
     def get_by_id(self, connection_id: int) -> Optional[Dict]:
         """Получить подключение по ID"""
         try:
@@ -186,7 +114,8 @@ class ConnectionRepository(BaseRepository):
             
             connection_ids = [row['id'] for row in rows]
             employees_map: Dict[int, List[str]] = {}
-            
+            movement_map: Dict[int, Dict[str, Dict[str, float]]] = {}
+
             if connection_ids:
                 placeholders = ",".join("?" for _ in connection_ids)
                 cursor.execute(f"""
@@ -199,10 +128,38 @@ class ConnectionRepository(BaseRepository):
                 
                 for emp_row in cursor.fetchall():
                     employees_map.setdefault(emp_row['connection_id'], []).append(emp_row['full_name'])
+
+                # Агрегируем списанное оборудование по подключению
+                cursor.execute(
+                    f"""
+                        SELECT connection_id, item_type, item_name, SUM(quantity) as qty
+                        FROM material_movement_log
+                        WHERE connection_id IN ({placeholders})
+                          AND item_type IN ('onu', 'media_converter', 'snr_box')
+                          AND operation_type = 'deduct'
+                        GROUP BY connection_id, item_type, item_name
+                    """,
+                    connection_ids,
+                )
+                for mov in cursor.fetchall():
+                    conn_mov = movement_map.setdefault(mov["connection_id"], {})
+                    type_mov = conn_mov.setdefault(mov["item_type"], {})
+                    type_mov[mov["item_name"]] = mov["qty"]
             
             connections = []
-            total_fiber = 0.0
-            total_twisted = 0.0
+            total_fiber_share = 0.0
+            total_twisted_share = 0.0
+            total_fiber_all = 0.0
+            total_twisted_all = 0.0
+            
+            def _format_items(items: Dict[str, float]) -> str:
+                if not items:
+                    return "-"
+                parts = []
+                for name, qty in items.items():
+                    qty_fmt = int(qty) if float(qty).is_integer() else round(qty, 2)
+                    parts.append(f"{name} x{qty_fmt}")
+                return "; ".join(parts)
             
             for row in rows:
                 conn_dict = dict(row)
@@ -211,23 +168,166 @@ class ConnectionRepository(BaseRepository):
                 conn_dict['employee_fiber_meters'] = round(conn_dict['fiber_meters'] / emp_count, 2)
                 conn_dict['employee_twisted_pair_meters'] = round(conn_dict['twisted_pair_meters'] / emp_count, 2)
                 conn_dict['all_employees'] = employees_map.get(conn_dict['id'], [])
+                conn_dict['total_fiber_meters'] = conn_dict['fiber_meters']
+                conn_dict['total_twisted_pair_meters'] = conn_dict['twisted_pair_meters']
+
+                mov = movement_map.get(conn_dict['id'], {})
+                conn_dict['snr_spent'] = _format_items(mov.get('snr_box', {})) if mov.get('snr_box') else (conn_dict.get('snr_box_model') or "-")
+                conn_dict['onu_spent'] = _format_items(mov.get('onu', {}))
+                conn_dict['media_spent'] = _format_items(mov.get('media_converter', {}))
                 
                 connections.append(conn_dict)
-                total_fiber += conn_dict['employee_fiber_meters']
-                total_twisted += conn_dict['employee_twisted_pair_meters']
+                total_fiber_share += conn_dict['employee_fiber_meters']
+                total_twisted_share += conn_dict['employee_twisted_pair_meters']
+                total_fiber_all += conn_dict['total_fiber_meters']
+                total_twisted_all += conn_dict['total_twisted_pair_meters']
             
             conn.close()
             
             stats = {
                 'total_connections': len(connections),
-                'total_fiber_meters': round(total_fiber, 2),
-                'total_twisted_pair_meters': round(total_twisted, 2)
+                'total_fiber_meters': round(total_fiber_share, 2),
+                'total_twisted_pair_meters': round(total_twisted_share, 2),
+                'total_connection_fiber_meters': round(total_fiber_all, 2),
+                'total_connection_twisted_pair_meters': round(total_twisted_all, 2),
             }
             
             return connections, stats
         except Exception as e:
-            logger.error(f"Ошибка при получении отчета: {e}")
+            logger.error(f"Ошибка при получении отчета по сотруднику: {e}")
             return [], {}
+
+    def get_global_report(
+        self,
+        days: Optional[int] = None,
+        start_date: Optional[datetime] = None,
+        end_date: Optional[datetime] = None
+    ) -> tuple[List[Dict], Dict]:
+        """Получить общий отчет по всем сотрудникам за период"""
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor()
+
+            date_condition = ""
+            params: list = []
+            if start_date and end_date:
+                date_condition = "WHERE c.created_at BETWEEN ? AND ?"
+                params.append(start_date.strftime("%Y-%m-%d %H:%M:%S"))
+                params.append(end_date.strftime("%Y-%m-%d %H:%M:%S"))
+            elif start_date:
+                date_condition = "WHERE c.created_at >= ?"
+                params.append(start_date.strftime("%Y-%m-%d %H:%M:%S"))
+            elif days is not None:
+                date_limit = datetime.now() - timedelta(days=days)
+                date_condition = "WHERE c.created_at >= ?"
+                params.append(date_limit.strftime("%Y-%m-%d %H:%M:%S"))
+
+            query = f"""
+                SELECT 
+                    c.id,
+                    c.connection_type,
+                    c.address,
+                    c.router_model,
+                    c.snr_box_model,
+                    c.port,
+                    c.fiber_meters,
+                    c.twisted_pair_meters,
+                    c.created_at,
+                    COUNT(DISTINCT ce.employee_id) as employee_count
+                FROM connections c
+                JOIN connection_employees ce ON ce.connection_id = c.id
+                {date_condition}
+                GROUP BY c.id
+                ORDER BY c.created_at DESC
+            """
+
+            cursor.execute(query, params)
+            rows = cursor.fetchall()
+
+            connection_ids = [row["id"] for row in rows]
+            employees_map: Dict[int, List[str]] = {}
+            movement_map: Dict[int, Dict[str, Dict[str, float]]] = {}
+
+            if connection_ids:
+                placeholders = ",".join("?" for _ in connection_ids)
+                cursor.execute(
+                    f"""
+                        SELECT ce.connection_id, e.full_name
+                        FROM connection_employees ce
+                        JOIN employees e ON e.id = ce.employee_id
+                        WHERE ce.connection_id IN ({placeholders})
+                        ORDER BY ce.connection_id, e.full_name
+                    """,
+                    connection_ids,
+                )
+
+                for emp_row in cursor.fetchall():
+                    employees_map.setdefault(emp_row["connection_id"], []).append(emp_row["full_name"])
+
+                cursor.execute(
+                    f"""
+                        SELECT connection_id, item_type, item_name, SUM(quantity) as qty
+                        FROM material_movement_log
+                        WHERE connection_id IN ({placeholders})
+                          AND item_type IN ('onu', 'media_converter', 'snr_box')
+                          AND operation_type = 'deduct'
+                        GROUP BY connection_id, item_type, item_name
+                    """,
+                    connection_ids,
+                )
+                for mov in cursor.fetchall():
+                    conn_mov = movement_map.setdefault(mov["connection_id"], {})
+                    type_mov = conn_mov.setdefault(mov["item_type"], {})
+                    type_mov[mov["item_name"]] = mov["qty"]
+
+            connections = []
+            total_fiber_share = 0.0
+            total_twisted_share = 0.0
+            total_fiber_all = 0.0
+            total_twisted_all = 0.0
+
+            def _format_items(items: Dict[str, float]) -> str:
+                if not items:
+                    return "-"
+                parts = []
+                for name, qty in items.items():
+                    qty_fmt = int(qty) if float(qty).is_integer() else round(qty, 2)
+                    parts.append(f"{name} x{qty_fmt}")
+                return "; ".join(parts)
+
+            for row in rows:
+                conn_dict = dict(row)
+                emp_count = max(conn_dict["employee_count"], 1)
+
+                conn_dict["employee_fiber_meters"] = round(conn_dict["fiber_meters"] / emp_count, 2)
+                conn_dict["employee_twisted_pair_meters"] = round(conn_dict["twisted_pair_meters"] / emp_count, 2)
+                conn_dict["all_employees"] = employees_map.get(conn_dict["id"], [])
+                conn_dict["total_fiber_meters"] = conn_dict["fiber_meters"]
+                conn_dict["total_twisted_pair_meters"] = conn_dict["twisted_pair_meters"]
+
+                mov = movement_map.get(conn_dict["id"], {})
+                conn_dict["snr_spent"] = _format_items(mov.get("snr_box", {})) if mov.get("snr_box") else (conn_dict.get("snr_box_model") or "-")
+                conn_dict["onu_spent"] = _format_items(mov.get("onu", {}))
+                conn_dict["media_spent"] = _format_items(mov.get("media_converter", {}))
+
+                connections.append(conn_dict)
+                total_fiber_share += conn_dict["employee_fiber_meters"]
+                total_twisted_share += conn_dict["employee_twisted_pair_meters"]
+                total_fiber_all += conn_dict["fiber_meters"]
+                total_twisted_all += conn_dict["twisted_pair_meters"]
+
+            stats = {
+                "total_connections": len(connections),
+                "total_fiber_meters": round(total_fiber_share, 2),
+                "total_twisted_pair_meters": round(total_twisted_share, 2),
+                "total_connection_fiber_meters": round(total_fiber_all, 2),
+                "total_connection_twisted_pair_meters": round(total_twisted_all, 2),
+            }
+
+            return connections, stats
+        except Exception as exc:
+            logger.error("Ошибка при получении общего отчета: %s", exc)
+            return [], {"total_connections": 0, "total_fiber_meters": 0, "total_twisted_pair_meters": 0}
     
     def get_all_count(self) -> int:
         """Получить общее количество подключений"""

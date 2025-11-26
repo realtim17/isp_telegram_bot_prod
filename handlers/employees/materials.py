@@ -25,9 +25,9 @@ async def select_employee_for_material(
     await query.answer()
 
     if query.data == "back_to_manage":
-        from .start import manage_employees_start
+        from .start import return_to_manage_menu
 
-        return await manage_employees_start(flow, update, context)
+        return await return_to_manage_menu(flow, update, context)
 
     emp_id = int(query.data.split("_")[2])
     employee = await run_in_thread(flow.db.get_employee_by_id, emp_id)

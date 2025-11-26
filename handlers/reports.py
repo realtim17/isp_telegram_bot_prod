@@ -22,6 +22,8 @@ from report_generator import ReportGenerator
 logger = logging.getLogger(__name__)
 
 DATE_INPUT_FORMAT = "%d.%m.%Y"
+REPORT_MODE_EMPLOYEE = "employee"
+REPORT_MODE_GLOBAL = "global"
 
 
 def _parse_date_input(text: str):
@@ -50,25 +52,28 @@ async def _generate_report_for_period(
     query=None
 ) -> int:
     """Общая реализация формирования и отправки отчета"""
+    report_mode = context.user_data.get('report_mode', REPORT_MODE_EMPLOYEE)
     emp_id = context.user_data.get('report_employee_id')
     message = update.effective_message
     
-    if not emp_id:
-        await message.reply_text(
-            "❌ Сотрудник для отчета не выбран. Запустите формирование отчета заново.",
-            reply_markup=get_main_keyboard()
-        )
-        context.user_data.clear()
-        return ConversationHandler.END
-    
-    employee = await run_in_thread(db.get_employee_by_id, emp_id)
-    if not employee:
-        await message.reply_text(
-            "❌ Не удалось найти информацию о сотруднике. Попробуйте еще раз.",
-            reply_markup=get_main_keyboard()
-        )
-        context.user_data.clear()
-        return ConversationHandler.END
+    employee = None
+    if report_mode == REPORT_MODE_EMPLOYEE:
+        if not emp_id:
+            await message.reply_text(
+                "❌ Сотрудник для отчета не выбран. Запустите формирование отчета заново.",
+                reply_markup=get_main_keyboard()
+            )
+            context.user_data.clear()
+            return ConversationHandler.END
+
+        employee = await run_in_thread(db.get_employee_by_id, emp_id)
+        if not employee:
+            await message.reply_text(
+                "❌ Не удалось найти информацию о сотруднике. Попробуйте еще раз.",
+                reply_markup=get_main_keyboard()
+            )
+            context.user_data.clear()
+            return ConversationHandler.END
     
     if query:
         await query.edit_message_text("⏳ Формирую отчет, подождите...")
@@ -78,19 +83,28 @@ async def _generate_report_for_period(
         await target_message.reply_text("⏳ Формирую отчет, подождите...")
     
     try:
-        report_task = run_in_thread(
-            db.get_employee_report,
-            emp_id,
-            start_date=start_date,
-            end_date=end_date
-        )
-        movements_task = run_in_thread(
-            db.get_employee_movements,
-            emp_id,
-            start_date,
-            end_date
-        )
-        (connections, stats), movements = await asyncio.gather(report_task, movements_task)
+        if report_mode == REPORT_MODE_EMPLOYEE:
+            report_task = run_in_thread(
+                db.get_employee_report,
+                emp_id,
+                start_date=start_date,
+                end_date=end_date
+            )
+            movements_task = run_in_thread(
+                db.get_employee_movements,
+                emp_id,
+                start_date,
+                end_date
+            )
+            (connections, stats), movements = await asyncio.gather(report_task, movements_task)
+        else:
+            report_task = run_in_thread(
+                db.get_global_report,
+                start_date=start_date,
+                end_date=end_date
+            )
+            connections, stats = await report_task
+            movements = []
     except Exception as exc:
         logger.error(f"Ошибка при получении данных для отчета: {exc}")
         await target_message.reply_text(
@@ -101,8 +115,13 @@ async def _generate_report_for_period(
         return ConversationHandler.END
     
     if not connections and not movements:
+        info_text = (
+            f"ℹ️ У сотрудника <b>{employee['full_name']}</b> нет данных за период {period_name}."
+            if report_mode == REPORT_MODE_EMPLOYEE
+            else f"ℹ️ Нет подключений за период {period_name}."
+        )
         await target_message.reply_text(
-            f"ℹ️ У сотрудника <b>{employee['full_name']}</b> нет данных за период {period_name}.",
+            info_text,
             parse_mode='HTML',
             reply_markup=get_main_keyboard()
         )
@@ -110,26 +129,46 @@ async def _generate_report_for_period(
         return ConversationHandler.END
     
     try:
-        filename = await run_in_thread(
-            ReportGenerator.generate_employee_report,
-            employee_name=employee['full_name'],
-            connections=connections,
-            stats=stats,
-            period_name=period_name,
-            movements=movements
-        )
+        if report_mode == REPORT_MODE_EMPLOYEE:
+            filename = await run_in_thread(
+                ReportGenerator.generate_employee_report,
+                employee_name=employee['full_name'],
+                connections=connections,
+                stats=stats,
+                period_name=period_name,
+                movements=movements
+            )
+        else:
+            filename = await run_in_thread(
+                ReportGenerator.generate_global_report,
+                connections=connections,
+                stats=stats,
+                period_name=period_name,
+            )
         
         with open(filename, 'rb') as file:
+            caption = (
+                f"📊 Отчет по сотруднику: <b>{employee['full_name']}</b>\n"
+                f"Период: {period_name}\n"
+                f"Подключений: {stats.get('total_connections', 0)}\n"
+                f"ВОЛС всего: {stats.get('total_connection_fiber_meters', stats.get('total_fiber_meters', 0))} м\n"
+                f"ВОЛС (на исполнителя): {stats.get('total_fiber_meters', 0)} м\n"
+                f"Витая пара всего: {stats.get('total_connection_twisted_pair_meters', stats.get('total_twisted_pair_meters', 0))} м\n"
+                f"Витая пара (на исполнителя): {stats.get('total_twisted_pair_meters', 0)} м"
+            ) if report_mode == REPORT_MODE_EMPLOYEE else (
+                f"📊 Общий отчет по подключениям\n"
+                f"Период: {period_name}\n"
+                f"Подключений: {stats.get('total_connections', 0)}\n"
+                f"ВОЛС всего: {stats.get('total_connection_fiber_meters', stats.get('total_fiber_meters', 0))} м\n"
+                f"ВОЛС (на исполнителя): {stats.get('total_fiber_meters', 0)} м\n"
+                f"Витая пара всего: {stats.get('total_connection_twisted_pair_meters', stats.get('total_twisted_pair_meters', 0))} м\n"
+                f"Витая пара (на исполнителя): {stats.get('total_twisted_pair_meters', 0)} м"
+            )
+
             await target_message.reply_document(
                 document=file,
                 filename=filename,
-                caption=(
-                    f"📊 Отчет по сотруднику: <b>{employee['full_name']}</b>\n"
-                    f"Период: {period_name}\n"
-                    f"Подключений: {stats.get('total_connections', 0)}\n"
-                    f"ВОЛС: {stats.get('total_fiber_meters', 0)} м\n"
-                    f"Витая пара: {stats.get('total_twisted_pair_meters', 0)} м"
-                ),
+                caption=caption,
                 parse_mode='HTML'
             )
         
@@ -163,7 +202,7 @@ async def report_start(update: Update, context: ContextTypes.DEFAULT_TYPE, db) -
             await update.message.reply_text(text, reply_markup=get_main_keyboard())
         return ConversationHandler.END
     
-    keyboard = []
+    keyboard = [[InlineKeyboardButton("📑 Общий отчет (все сотрудники)", callback_data="rep_all")]]
     for emp in employees:
         keyboard.append([InlineKeyboardButton(emp['full_name'], callback_data=f"rep_emp_{emp['id']}")])
     
@@ -191,19 +230,25 @@ async def report_select_period(update: Update, context: ContextTypes.DEFAULT_TYP
         await query.message.reply_text("Выберите действие:", reply_markup=get_main_keyboard())
         return ConversationHandler.END
     
-    # Сохраняем выбранного сотрудника
-    emp_id = int(query.data.split('_')[2])
-    context.user_data['report_employee_id'] = emp_id
-    
-    employee = await run_in_thread(db.get_employee_by_id, emp_id)
-    if not employee:
-        await query.edit_message_text(
-            "❌ Не удалось найти выбранного сотрудника. Попробуйте снова.",
-            parse_mode='HTML'
-        )
-        await query.message.reply_text("Выберите действие:", reply_markup=get_main_keyboard())
-        context.user_data.clear()
-        return ConversationHandler.END
+    if query.data == "rep_all":
+        context.user_data['report_mode'] = REPORT_MODE_GLOBAL
+        employee_name = "Все сотрудники"
+    else:
+        # Сохраняем выбранного сотрудника
+        emp_id = int(query.data.split('_')[2])
+        context.user_data['report_employee_id'] = emp_id
+        context.user_data['report_mode'] = REPORT_MODE_EMPLOYEE
+        
+        employee = await run_in_thread(db.get_employee_by_id, emp_id)
+        if not employee:
+            await query.edit_message_text(
+                "❌ Не удалось найти выбранного сотрудника. Попробуйте снова.",
+                parse_mode='HTML'
+            )
+            await query.message.reply_text("Выберите действие:", reply_markup=get_main_keyboard())
+            context.user_data.clear()
+            return ConversationHandler.END
+        employee_name = employee['full_name']
     
     keyboard = [
         [InlineKeyboardButton("📅 Последняя неделя", callback_data='period_7')],
@@ -214,7 +259,7 @@ async def report_select_period(update: Update, context: ContextTypes.DEFAULT_TYP
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     await query.edit_message_text(
-        f"Выбран сотрудник: <b>{employee['full_name']}</b>\n\n"
+        f"Отчет по: <b>{employee_name}</b>\n\n"
         f"Выберите период для отчета:",
         reply_markup=reply_markup,
         parse_mode='HTML'

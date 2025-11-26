@@ -3,6 +3,7 @@
 """
 from typing import List, Dict, Optional
 import logging
+import sqlite3
 
 from database.base_repository import BaseRepository
 
@@ -17,11 +18,13 @@ class RouterRepository(BaseRepository):
         employee_id: int,
         router_name: str,
         quantity: int,
-        created_by: Optional[int] = None
+        created_by: Optional[int] = None,
+        connection: Optional[sqlite3.Connection] = None,
     ) -> bool:
         """Добавить роутеры сотруднику"""
+        own_connection = connection is None
+        conn = connection or self.get_connection()
         try:
-            conn = self.get_connection()
             cursor = conn.cursor()
             
             # Проверяем, есть ли уже такой роутер у сотрудника
@@ -39,7 +42,10 @@ class RouterRepository(BaseRepository):
                     SET quantity = ? 
                     WHERE id = ?
                 """, (new_quantity, existing[0]))
-                logger.info(f"Обновлено количество роутеров '{router_name}' у сотрудника ID {employee_id}: +{quantity} (всего: {new_quantity})")
+                logger.info(
+                    "Обновлено количество роутеров '%s' у сотрудника ID %s: +%s (всего: %s)",
+                    router_name, employee_id, quantity, new_quantity
+                )
             else:
                 # Добавляем новую запись
                 new_quantity = quantity
@@ -47,21 +53,29 @@ class RouterRepository(BaseRepository):
                     INSERT INTO employee_routers (employee_id, router_name, quantity)
                     VALUES (?, ?, ?)
                 """, (employee_id, router_name, quantity))
-                logger.info(f"Добавлены роутеры '{router_name}' сотруднику ID {employee_id}: {quantity} шт.")
+                logger.info("Добавлены роутеры '%s' сотруднику ID %s: %s шт.", router_name, employee_id, quantity)
             
-            conn.commit()
-            conn.close()
-            
-            # Логируем операцию через MaterialRepository
+            # Логируем операцию в рамках той же транзакции
             from database.repositories.material_repository import MaterialRepository
             material_repo = MaterialRepository(self.db_path)
-            material_repo.log_movement(employee_id, 'add', 'router', router_name,
-                                      quantity, new_quantity, None, created_by)
+            if not material_repo.log_movement(
+                employee_id, 'add', 'router', router_name,
+                quantity, new_quantity, None, created_by,
+                cursor=cursor
+            ):
+                raise RuntimeError("Не удалось записать лог движения роутеров")
             
+            if own_connection:
+                conn.commit()
             return True
         except Exception as e:
-            logger.error(f"Ошибка при добавлении роутеров: {e}")
+            if own_connection:
+                conn.rollback()
+            logger.error("Ошибка при добавлении роутеров: %s", e)
             return False
+        finally:
+            if own_connection:
+                conn.close()
     
     def deduct_router(
         self,
@@ -69,11 +83,13 @@ class RouterRepository(BaseRepository):
         router_name: str,
         quantity: int = 1,
         connection_id: Optional[int] = None,
-        created_by: Optional[int] = None
+        created_by: Optional[int] = None,
+        connection: Optional[sqlite3.Connection] = None,
     ) -> bool:
         """Списать роутер у сотрудника"""
+        own_connection = connection is None
+        conn = connection or self.get_connection()
         try:
-            conn = self.get_connection()
             cursor = conn.cursor()
             
             # Проверяем текущее количество
@@ -84,14 +100,12 @@ class RouterRepository(BaseRepository):
             existing = cursor.fetchone()
             
             if not existing:
-                logger.warning(f"Роутер '{router_name}' не найден у сотрудника ID {employee_id}")
-                conn.close()
+                logger.warning("Роутер '%s' не найден у сотрудника ID %s", router_name, employee_id)
                 return False
             
             current_quantity = existing[1]
             if current_quantity < quantity:
-                logger.warning(f"Недостаточно роутеров '{router_name}' у сотрудника ID {employee_id}")
-                conn.close()
+                logger.warning("Недостаточно роутеров '%s' у сотрудника ID %s", router_name, employee_id)
                 return False
             
             new_quantity = current_quantity - quantity
@@ -99,7 +113,7 @@ class RouterRepository(BaseRepository):
             if new_quantity == 0:
                 # Удаляем запись
                 cursor.execute("DELETE FROM employee_routers WHERE id = ?", (existing[0],))
-                logger.info(f"Списаны все роутеры '{router_name}' у сотрудника ID {employee_id}")
+                logger.info("Списаны все роутеры '%s' у сотрудника ID %s", router_name, employee_id)
             else:
                 # Обновляем количество
                 cursor.execute("""
@@ -107,21 +121,32 @@ class RouterRepository(BaseRepository):
                     SET quantity = ? 
                     WHERE id = ?
                 """, (new_quantity, existing[0]))
-                logger.info(f"Списан роутер '{router_name}' у сотрудника ID {employee_id}: -{quantity} (осталось: {new_quantity})")
+                logger.info(
+                    "Списан роутер '%s' у сотрудника ID %s: -%s (осталось: %s)",
+                    router_name, employee_id, quantity, new_quantity
+                )
             
-            conn.commit()
-            conn.close()
-            
-            # Логируем операцию
+            # Логируем операцию в той же транзакции
             from database.repositories.material_repository import MaterialRepository
             material_repo = MaterialRepository(self.db_path)
-            material_repo.log_movement(employee_id, 'deduct', 'router', router_name,
-                                      quantity, new_quantity, connection_id, created_by)
+            if not material_repo.log_movement(
+                employee_id, 'deduct', 'router', router_name,
+                quantity, new_quantity, connection_id, created_by,
+                cursor=cursor
+            ):
+                raise RuntimeError("Не удалось записать лог движения роутеров")
             
+            if own_connection:
+                conn.commit()
             return True
         except Exception as e:
-            logger.error(f"Ошибка при списании роутера: {e}")
+            if own_connection:
+                conn.rollback()
+            logger.error("Ошибка при списании роутера: %s", e)
             return False
+        finally:
+            if own_connection:
+                conn.close()
     
     def get_routers(self, employee_id: int) -> List[Dict]:
         """Получить список роутеров сотрудника"""
@@ -163,4 +188,3 @@ class RouterRepository(BaseRepository):
         except Exception as e:
             logger.error(f"Ошибка при получении списка роутеров: {e}")
             return []
-

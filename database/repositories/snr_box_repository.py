@@ -3,6 +3,7 @@
 """
 from typing import List, Dict, Optional
 import logging
+import sqlite3
 
 from database.base_repository import BaseRepository
 
@@ -17,11 +18,13 @@ class SNRBoxRepository(BaseRepository):
         employee_id: int,
         box_name: str,
         quantity: int,
-        created_by: Optional[int] = None
+        created_by: Optional[int] = None,
+        connection: Optional[sqlite3.Connection] = None,
     ) -> bool:
         """Добавить боксы сотруднику"""
+        own_connection = connection is None
+        conn = connection or self.get_connection()
         try:
-            conn = self.get_connection()
             cursor = conn.cursor()
             
             cursor.execute("""
@@ -44,12 +47,9 @@ class SNRBoxRepository(BaseRepository):
                     VALUES (?, ?, ?)
                 """, (employee_id, box_name, quantity))
             
-            conn.commit()
-            conn.close()
-            
             from database.repositories.material_repository import MaterialRepository
             material_repo = MaterialRepository(self.db_path)
-            material_repo.log_movement(
+            if not material_repo.log_movement(
                 employee_id,
                 'add',
                 'snr_box',
@@ -57,13 +57,23 @@ class SNRBoxRepository(BaseRepository):
                 quantity,
                 new_quantity,
                 None,
-                created_by
-            )
+                created_by,
+                cursor=cursor
+            ):
+                raise RuntimeError("Не удалось записать движение по боксам")
+            
+            if own_connection:
+                conn.commit()
             logger.info("Добавлены боксы '%s' сотруднику %s (+%s)", box_name, employee_id, quantity)
             return True
         except Exception as exc:
+            if own_connection:
+                conn.rollback()
             logger.error("Ошибка при добавлении боксов: %s", exc)
             return False
+        finally:
+            if own_connection:
+                conn.close()
     
     def deduct_box(
         self,
@@ -71,11 +81,13 @@ class SNRBoxRepository(BaseRepository):
         box_name: str,
         quantity: int = 1,
         connection_id: Optional[int] = None,
-        created_by: Optional[int] = None
+        created_by: Optional[int] = None,
+        connection: Optional[sqlite3.Connection] = None,
     ) -> bool:
         """Списать боксы у сотрудника"""
+        own_connection = connection is None
+        conn = connection or self.get_connection()
         try:
-            conn = self.get_connection()
             cursor = conn.cursor()
             
             cursor.execute("""
@@ -85,13 +97,11 @@ class SNRBoxRepository(BaseRepository):
             existing = cursor.fetchone()
             if not existing:
                 logger.warning("Боксы '%s' не найдены у сотрудника %s", box_name, employee_id)
-                conn.close()
                 return False
             
             current_quantity = existing['quantity']
             if current_quantity < quantity:
                 logger.warning("Недостаточно боксов '%s' у сотрудника %s", box_name, employee_id)
-                conn.close()
                 return False
             
             new_quantity = current_quantity - quantity
@@ -104,12 +114,9 @@ class SNRBoxRepository(BaseRepository):
                     WHERE id = ?
                 """, (new_quantity, existing['id']))
             
-            conn.commit()
-            conn.close()
-            
             from database.repositories.material_repository import MaterialRepository
             material_repo = MaterialRepository(self.db_path)
-            material_repo.log_movement(
+            if not material_repo.log_movement(
                 employee_id,
                 'deduct',
                 'snr_box',
@@ -117,13 +124,23 @@ class SNRBoxRepository(BaseRepository):
                 quantity,
                 new_quantity,
                 connection_id,
-                created_by
-            )
+                created_by,
+                cursor=cursor
+            ):
+                raise RuntimeError("Не удалось записать движение по боксам")
+            
+            if own_connection:
+                conn.commit()
             logger.info("Списаны боксы '%s' у сотрудника %s (-%s)", box_name, employee_id, quantity)
             return True
         except Exception as exc:
+            if own_connection:
+                conn.rollback()
             logger.error("Ошибка при списании боксов: %s", exc)
             return False
+        finally:
+            if own_connection:
+                conn.close()
     
     def get_boxes(self, employee_id: int) -> List[Dict]:
         """Получить список боксов сотрудника"""

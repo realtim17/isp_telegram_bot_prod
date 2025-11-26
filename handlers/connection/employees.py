@@ -20,18 +20,26 @@ async def start_employee_selection(
 ) -> int:
     """Показать шаг выбора исполнителей"""
     query = update.callback_query
-    
+    message = update.effective_message
+
     employees = await run_in_thread(db.get_all_employees) or []
     if not employees:
-        await query.edit_message_text(
-            "⚠️ В системе нет ни одного сотрудника!\n\n"
-            "Обратитесь к администратору для добавления сотрудников.",
-            reply_markup=None
-        )
-        await query.message.reply_text(
-            "Выберите действие:",
-            reply_markup=get_main_keyboard()
-        )
+        if query:
+            await query.edit_message_text(
+                "⚠️ В системе нет ни одного сотрудника!\n\n"
+                "Обратитесь к администратору для добавления сотрудников.",
+                reply_markup=None
+            )
+            await query.message.reply_text(
+                "Выберите действие:",
+                reply_markup=get_main_keyboard()
+            )
+        else:
+            await message.reply_text(
+                "⚠️ В системе нет ни одного сотрудника!\n\n"
+                "Обратитесь к администратору для добавления сотрудников.",
+                reply_markup=get_main_keyboard()
+            )
         return ConversationHandler.END
     
     context.user_data['selected_employees'] = []
@@ -46,20 +54,27 @@ async def start_employee_selection(
     if pre_text:
         message_parts.append(pre_text)
     message_parts.append(
-        "👥 <b>Шаг 13/13: Выбор исполнителей</b>\n\n"
+        "👥 <b>Шаг 15/15: Выбор исполнителей</b>\n\n"
         "Выберите сотрудников, которые участвовали в подключении:\n"
         "(можно выбрать нескольких)"
     )
     message_text = "\n\n".join(message_parts)
     
-    await query.edit_message_text(
-        message_text,
-        parse_mode='HTML'
-    )
-    await query.message.reply_text(
-        "Нажмите ✅ Готово после выбора:",
-        reply_markup=reply_markup
-    )
+    if query:
+        await query.edit_message_text(
+            message_text,
+            parse_mode='HTML'
+        )
+        await query.message.reply_text(
+            "Нажмите ✅ Готово после выбора:",
+            reply_markup=reply_markup
+        )
+    else:
+        await message.reply_text(
+            message_text,
+            parse_mode='HTML',
+            reply_markup=reply_markup
+        )
     
     return SELECT_EMPLOYEES
 

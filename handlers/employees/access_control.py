@@ -26,7 +26,8 @@ async def show_access_menu(flow: "EmployeeFlow", update: Update, context: Contex
     """Показать главное меню управления доступом"""
     if not flow.access_manager:
         await _access_not_configured(update)
-        return await flow.manage_employees_start(update, context)
+        from .start import return_to_manage_menu
+        return await return_to_manage_menu(flow, update, context)
 
     entries = flow.access_manager.list_entries()
     managed_count = sum(1 for entry in entries if entry.get("source") == "db")
@@ -55,11 +56,13 @@ async def handle_access_action(flow: "EmployeeFlow", update: Update, context: Co
 
     if data == "back_to_manage":
         await query.answer()
-        return await flow.manage_employees_start(update, context)
+        from .start import return_to_manage_menu
+        return await return_to_manage_menu(flow, update, context)
 
     if not flow.access_manager:
         await _access_not_configured(update)
-        return await flow.manage_employees_start(update, context)
+        from .start import return_to_manage_menu
+        return await return_to_manage_menu(flow, update, context)
 
     if data == "access_menu" or data == "access_back_to_menu":
         await query.answer()
@@ -92,7 +95,8 @@ async def enter_access_user_id(flow: "EmployeeFlow", update: Update, context: Co
     """Обработка ввода ID пользователя"""
     if not flow.access_manager:
         await update.message.reply_text("⚠️ Управление доступом недоступно.")
-        return await flow.manage_employees_start(update, context)
+        from .start import return_to_manage_menu
+        return await return_to_manage_menu(flow, update, context)
 
     text = (update.message.text or "").strip()
     lower_text = text.lower()

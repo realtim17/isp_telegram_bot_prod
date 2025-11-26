@@ -26,8 +26,8 @@ async def select_employee_for_snr(flow: "EmployeeFlow", update: Update, context:
     await query.answer()
     
     if query.data == "back_to_manage":
-        from .start import manage_employees_start
-        return await manage_employees_start(flow, update, context)
+        from .start import return_to_manage_menu
+        return await return_to_manage_menu(flow, update, context)
     
     emp_id = int(query.data.split("_")[-1])
     context.user_data["snr_selected_employee_id"] = emp_id
@@ -164,6 +164,12 @@ async def enter_snr_quantity(flow: "EmployeeFlow", update: Update, context: Cont
         return ENTER_SNR_QUANTITY
     
     context.user_data["snr_box_quantity"] = quantity
+    emp_id = context.user_data.get("snr_selected_employee_id")
+    employee = await run_in_thread(flow.db.get_employee_by_id, emp_id) if emp_id else None
+    action = context.user_data.get("snr_action", "add")
+    box_name = context.user_data.get("snr_box_name")
+    action_word = "добавление" if action == "add" else "списание"
+    sign = "+" if action == "add" else "-"
     keyboard = InlineKeyboardMarkup(
         [
             [InlineKeyboardButton("✅ Подтвердить", callback_data="snr_confirm")],
@@ -172,8 +178,13 @@ async def enter_snr_quantity(flow: "EmployeeFlow", update: Update, context: Cont
         ]
     )
     await update.message.reply_text(
-        "Проверьте данные и подтвердите операцию:",
+        "Проверьте данные и подтвердите операцию:\n\n"
+        f"👤 Сотрудник: <b>{employee['full_name'] if employee else emp_id}</b>\n"
+        f"🧰 Бокс: {box_name}\n"
+        f"Действие: {action_word}\n"
+        f"Количество: {sign}{quantity} шт.",
         reply_markup=keyboard,
+        parse_mode="HTML",
     )
     return CONFIRM_SNR_OPERATION
 

@@ -48,6 +48,10 @@ def _format_report_text(connection_id: int, data: Dict, employee_names: List[str
     # Получаем информацию о роутерах (если есть)
     router_model = data.get('router_model', '-')
     router_quantity = data.get('router_quantity', 1)
+    onu_model = data.get('onu_model', '-') or '-'
+    onu_quantity = data.get('onu_quantity', 0) or 0
+    media_model = data.get('media_converter_model', '-') or '-'
+    media_quantity = data.get('media_converter_quantity', 0) or 0
     
     # Если роутер пропущен или "-", отображаем "-"
     if router_model == '-' or not router_model:
@@ -59,6 +63,20 @@ def _format_report_text(connection_id: int, data: Dict, employee_names: List[str
     
     snr_model = data.get('snr_box_model', '-') or '-'
     snr_info = snr_model if snr_model and snr_model != '-' else "-"
+    
+    if onu_model == '-' or not onu_model:
+        onu_info = "-"
+    else:
+        onu_info = onu_model
+        if onu_quantity > 0:
+            onu_info += f" ({onu_quantity} шт.)"
+    
+    if media_model == '-' or not media_model:
+        media_info = "-"
+    else:
+        media_info = media_model
+        if media_quantity > 0:
+            media_info += f" ({media_quantity} шт.)"
     
     # Получаем информацию о порте
     port = data.get('port', '-')
@@ -83,6 +101,8 @@ def _format_report_text(connection_id: int, data: Dict, employee_names: List[str
 <b> Тип подключения:</b> {type_name}
 <b> Модель роутера:</b> {router_info}
 <b> SNR бокс:</b> {snr_info}
+<b> ONU абон.терминал:</b> {onu_info}
+<b> Медиаконвертор:</b> {media_info}
 <b> Доступ на роутер:</b> {router_access_status}
 <b> Договор:</b> {contract_status}
 <b> Телеграмм Бот:</b> {telegram_bot_status}
