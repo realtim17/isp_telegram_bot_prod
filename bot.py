@@ -33,7 +33,8 @@ from handlers.commands import (
     start_command,
     help_command,
     cancel_command,
-    cancel_and_start_new
+    cancel_and_start_new,
+    stop_command,
 )
 
 # Импорт клавиатуры
@@ -111,6 +112,7 @@ def main():
         },
         fallbacks=[
             CommandHandler('cancel', cancel_command),
+            CommandHandler('stop', stop_command),
             MessageHandler(menu_buttons_filter, cancel_and_start_new)
         ]
     )
@@ -119,6 +121,7 @@ def main():
         text_input_filter,
         fallbacks=[
             CommandHandler('cancel', cancel_command),
+            CommandHandler('stop', stop_command),
             MessageHandler(menu_buttons_filter, cancel_and_start_new)
         ]
     )
@@ -139,6 +142,7 @@ def main():
     # Добавляем обработчики
     application.add_handler(CommandHandler('start', start_command))
     application.add_handler(CommandHandler('help', help_command))
+    application.add_handler(CommandHandler('stop', stop_command))
     application.add_handler(connection_conv)
     application.add_handler(report_conv)
     application.add_handler(employee_conv)

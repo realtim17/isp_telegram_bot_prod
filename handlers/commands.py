@@ -91,3 +91,13 @@ async def cancel_and_start_new(update: Update, context: ContextTypes.DEFAULT_TYP
         reply_markup=get_main_keyboard()
     )
     return ConversationHandler.END
+
+
+async def stop_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Принудительная остановка любых активных действий"""
+    context.user_data.clear()
+    await update.message.reply_text(
+        "⏹️ Все активные действия остановлены.",
+        reply_markup=get_main_keyboard()
+    )
+    return ConversationHandler.END

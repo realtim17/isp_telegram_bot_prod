@@ -45,10 +45,14 @@ async def cancel_by_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 async def cancel_by_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Отмена через команду /cancel"""
     context.user_data.clear()
+    text = update.message.text if update.message else ""
+    if text and text.strip().lower().startswith("/stop"):
+        msg = "⏹️ Все активные действия остановлены."
+    else:
+        msg = CANCEL_TEXT
     await update.message.reply_text(
-        CANCEL_TEXT,
+        msg,
         reply_markup=get_main_keyboard(),
         parse_mode='HTML'
     )
     return ConversationHandler.END
-
