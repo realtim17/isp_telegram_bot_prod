@@ -751,8 +751,19 @@ async def select_onu_connection(update: Update, context: ContextTypes.DEFAULT_TY
 
 async def enter_onu_quantity_connection(update: Update, context: ContextTypes.DEFAULT_TYPE, db) -> int:
     """Ввод количества ONU"""
+    text = (update.message.text or "").strip()
+    if text == CANCEL_TEXT:
+        context.user_data.clear()
+        await update.message.reply_text(
+            "❌ <b>Создание подключения отменено</b>\n\n"
+            "Все введённые данные удалены.",
+            reply_markup=get_main_keyboard(),
+            parse_mode='HTML'
+        )
+        return ConversationHandler.END
+
     try:
-        quantity = int(update.message.text.strip())
+        quantity = int(text)
         if quantity <= 0:
             raise ValueError
     except ValueError:
@@ -841,8 +852,19 @@ async def select_media_connection(update: Update, context: ContextTypes.DEFAULT_
 
 async def enter_media_quantity_connection(update: Update, context: ContextTypes.DEFAULT_TYPE, db) -> int:
     """Ввод количества медиаконверторов"""
+    text = (update.message.text or "").strip()
+    if text == CANCEL_TEXT:
+        context.user_data.clear()
+        await update.message.reply_text(
+            "❌ <b>Создание подключения отменено</b>\n\n"
+            "Все введённые данные удалены.",
+            reply_markup=get_main_keyboard(),
+            parse_mode='HTML'
+        )
+        return ConversationHandler.END
+
     try:
-        quantity = int(update.message.text.strip())
+        quantity = int(text)
         if quantity <= 0:
             raise ValueError
     except ValueError:
