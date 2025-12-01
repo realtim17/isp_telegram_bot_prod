@@ -20,6 +20,7 @@ class MaterialRepository(BaseRepository):
         fiber_meters: float = 0,
         twisted_pair_meters: float = 0,
         created_by: Optional[int] = None,
+        comment: str = "",
         connection: Optional[sqlite3.Connection] = None
     ) -> bool:
         """Добавить материалы на баланс сотрудника"""
@@ -50,6 +51,7 @@ class MaterialRepository(BaseRepository):
                 if not self.log_movement(
                     employee_id, 'add', 'fiber', 'ВОЛС',
                     fiber_meters, new_fiber, None, created_by,
+                    comment=comment,
                     cursor=cursor
                 ):
                     raise RuntimeError("Не удалось записать движение по ВОЛС")
@@ -57,6 +59,7 @@ class MaterialRepository(BaseRepository):
                 if not self.log_movement(
                     employee_id, 'add', 'twisted_pair', 'Витая пара',
                     twisted_pair_meters, new_twisted, None, created_by,
+                    comment=comment,
                     cursor=cursor
                 ):
                     raise RuntimeError("Не удалось записать движение по витой паре")
@@ -85,6 +88,7 @@ class MaterialRepository(BaseRepository):
         twisted_pair_meters: float = 0,
         connection_id: Optional[int] = None,
         created_by: Optional[int] = None,
+        comment: str = "",
         connection: Optional[sqlite3.Connection] = None
     ) -> bool:
         """Списать материалы с баланса сотрудника"""
@@ -132,6 +136,7 @@ class MaterialRepository(BaseRepository):
                 if not self.log_movement(
                     employee_id, 'deduct', 'fiber', 'ВОЛС',
                     fiber_meters, new_fiber, connection_id, created_by,
+                    comment=comment,
                     cursor=cursor
                 ):
                     raise RuntimeError("Не удалось зафиксировать списание ВОЛС")
@@ -139,6 +144,7 @@ class MaterialRepository(BaseRepository):
                 if not self.log_movement(
                     employee_id, 'deduct', 'twisted_pair', 'Витая пара',
                     twisted_pair_meters, new_twisted, connection_id, created_by,
+                    comment=comment,
                     cursor=cursor
                 ):
                     raise RuntimeError("Не удалось зафиксировать списание витой пары")
@@ -170,6 +176,7 @@ class MaterialRepository(BaseRepository):
         balance_after: float,
         connection_id: Optional[int] = None,
         created_by: Optional[int] = None,
+        comment: str = "",
         cursor: Optional[sqlite3.Cursor] = None
     ) -> bool:
         """Записать движение материала в лог"""
@@ -184,11 +191,11 @@ class MaterialRepository(BaseRepository):
             cursor.execute("""
                 INSERT INTO material_movement_log 
                 (employee_id, operation_type, item_type, item_name, quantity, 
-                 balance_after, connection_id, created_by)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                 balance_after, comment, connection_id, created_by)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 employee_id, operation_type, item_type, item_name,
-                quantity, balance_after, connection_id, created_by
+                quantity, balance_after, comment or "", connection_id, created_by
             ))
             
             if own_connection and conn:
@@ -223,6 +230,7 @@ class MaterialRepository(BaseRepository):
                     item_name,
                     quantity,
                     balance_after,
+                    comment,
                     connection_id,
                     created_at
                 FROM material_movement_log

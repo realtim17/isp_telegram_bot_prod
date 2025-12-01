@@ -62,23 +62,23 @@ class ReportGenerator:
         total_font = Font(name='Arial', size=11, bold=True)
         
         # Заголовок отчета
-        ws.merge_cells('A1:N1')
+        ws.merge_cells('A1:O1')
         ws['A1'] = f"Сводный отчет по монтажнику"
         ws['A1'].font = title_font
         ws['A1'].alignment = title_alignment
         
         # Информация о сотруднике и периоде
-        ws.merge_cells('A2:N2')
+        ws.merge_cells('A2:O2')
         ws['A2'] = f"Исполнитель: {employee_name}"
         ws['A2'].font = Font(name='Arial', size=11, bold=True)
         ws['A2'].alignment = cell_alignment
         
-        ws.merge_cells('A3:N3')
+        ws.merge_cells('A3:O3')
         ws['A3'] = f"Период: {period_name}"
         ws['A3'].font = Font(name='Arial', size=11)
         ws['A3'].alignment = cell_alignment
         
-        ws.merge_cells('A4:N4')
+        ws.merge_cells('A4:O4')
         ws['A4'] = f"Дата формирования: {datetime.now().strftime('%d.%m.%Y %H:%M')}"
         ws['A4'].font = Font(name='Arial', size=10)
         ws['A4'].alignment = cell_alignment
@@ -86,6 +86,7 @@ class ReportGenerator:
         # Заголовки столбцов (строка 6)
         headers = [
             'Столбец',
+            'Дата',
             'Тип',
             'Исполнители',
             'Адрес подключения',
@@ -98,7 +99,7 @@ class ReportGenerator:
             'ONU',
             'Медиаконверторы',
             'Связь с подключением',
-            'Дата'
+            'Комментарий',
         ]
         
         ws.row_dimensions[6].height = 30
@@ -111,20 +112,21 @@ class ReportGenerator:
             cell.border = border
         
         # Ширина столбцов
-        ws.column_dimensions['A'].width = 12  # Столбец
-        ws.column_dimensions['B'].width = 15  # Тип
-        ws.column_dimensions['C'].width = 25  # Исполнители
-        ws.column_dimensions['D'].width = 30  # Адрес
-        ws.column_dimensions['E'].width = 15  # Модель роутера
-        ws.column_dimensions['F'].width = 14  # ВОЛС всего
-        ws.column_dimensions['G'].width = 14  # Витая пара всего
-        ws.column_dimensions['H'].width = 16  # ВОЛС на исполнителя
-        ws.column_dimensions['I'].width = 16  # Витая пара на исполнителя
-        ws.column_dimensions['J'].width = 18  # SNR бокс
-        ws.column_dimensions['K'].width = 18  # ONU
-        ws.column_dimensions['L'].width = 22  # МК
-        ws.column_dimensions['M'].width = 20  # Связь с подключением
-        ws.column_dimensions['N'].width = 18  # Дата
+        ws.column_dimensions['A'].width = 12  # Столбец (№)
+        ws.column_dimensions['B'].width = 18  # Дата
+        ws.column_dimensions['C'].width = 15  # Тип
+        ws.column_dimensions['D'].width = 25  # Исполнители
+        ws.column_dimensions['E'].width = 30  # Адрес
+        ws.column_dimensions['F'].width = 15  # Модель роутера
+        ws.column_dimensions['G'].width = 14  # ВОЛС всего
+        ws.column_dimensions['H'].width = 14  # Витая пара всего
+        ws.column_dimensions['I'].width = 16  # ВОЛС на исполнителя
+        ws.column_dimensions['J'].width = 16  # Витая пара на исполнителя
+        ws.column_dimensions['K'].width = 18  # SNR бокс
+        ws.column_dimensions['L'].width = 18  # ONU
+        ws.column_dimensions['M'].width = 22  # МК
+        ws.column_dimensions['N'].width = 20  # Связь с подключением
+        ws.column_dimensions['O'].width = 30  # Комментарий
         
         # Данные подключений
         current_row = 7
@@ -145,8 +147,18 @@ class ReportGenerator:
             
             connection_link = f"Подключение #{conn['id']}" if conn.get('id') else "-"
 
+            snr_display = conn.get('snr_spent')
+            if not snr_display or snr_display == '-':
+                snr_model = conn.get('snr_box_model', '-')
+                snr_qty = conn.get('snr_box_quantity', 0) or 0
+                if snr_model and snr_model != '-':
+                    snr_display = f"{snr_model} ({int(snr_qty)} шт.)" if snr_qty else snr_model
+                else:
+                    snr_display = "-"
+
             row_data = [
                 idx,  # Номер по порядку
+                date_str,
                 type_name,  # Тип подключения
                 executors,
                 conn['address'],
@@ -155,11 +167,11 @@ class ReportGenerator:
                 conn.get('total_twisted_pair_meters', conn.get('twisted_pair_meters')),
                 conn['employee_fiber_meters'],
                 conn['employee_twisted_pair_meters'],
-                conn.get('snr_spent', conn.get('snr_box_model', '-')),
+                snr_display,
                 conn.get('onu_spent', '-'),
                 conn.get('media_spent', '-'),
                 connection_link,
-                date_str
+                conn.get('comment') or "-",
             ]
             
             for col_num, value in enumerate(row_data, 1):
@@ -167,7 +179,7 @@ class ReportGenerator:
                 cell.value = value
                 cell.border = border
                 
-                if col_num in [6, 7, 8, 9]:  # Числовые столбцы
+                if col_num in [7, 8, 9, 10]:  # Числовые столбцы
                     cell.alignment = number_alignment
                     cell.number_format = '0.00'
                 else:
@@ -188,7 +200,7 @@ class ReportGenerator:
         cell.border = border
         
         # Итого ВОЛС (всего по подключениям)
-        cell = ws.cell(row=current_row, column=6)
+        cell = ws.cell(row=current_row, column=7)
         cell.value = stats.get('total_connection_fiber_meters', stats.get('total_fiber_meters', 0))
         cell.font = total_font
         cell.fill = total_fill
@@ -197,7 +209,7 @@ class ReportGenerator:
         cell.border = border
         
         # Итого витая пара (всего по подключениям)
-        cell = ws.cell(row=current_row, column=7)
+        cell = ws.cell(row=current_row, column=8)
         cell.value = stats.get('total_connection_twisted_pair_meters', stats.get('total_twisted_pair_meters', 0))
         cell.font = total_font
         cell.fill = total_fill
@@ -206,7 +218,7 @@ class ReportGenerator:
         cell.border = border
         
         # Пустые ячейки для выравнивания
-        for col in (8, 9, 10, 11, 12, 13, 14):
+        for col in (6, 9, 10, 11, 12, 13, 14, 15):
             cell = ws.cell(row=current_row, column=col)
             cell.fill = total_fill
             cell.border = border
@@ -222,7 +234,7 @@ class ReportGenerator:
         cell.border = border
         
         # Итого ВОЛС для сотрудника (доля)
-        cell = ws.cell(row=current_row, column=8)
+        cell = ws.cell(row=current_row, column=9)
         cell.value = stats.get('total_fiber_meters', 0)
         cell.font = Font(name='Arial', size=12, bold=True, color="FFFFFF")
         cell.fill = PatternFill(start_color="70AD47", end_color="70AD47", fill_type="solid")
@@ -231,7 +243,7 @@ class ReportGenerator:
         cell.border = border
         
         # Итого витая пара для сотрудника (доля)
-        cell = ws.cell(row=current_row, column=9)
+        cell = ws.cell(row=current_row, column=10)
         cell.value = stats.get('total_twisted_pair_meters', 0)
         cell.font = Font(name='Arial', size=12, bold=True, color="FFFFFF")
         cell.fill = PatternFill(start_color="70AD47", end_color="70AD47", fill_type="solid")
@@ -240,7 +252,7 @@ class ReportGenerator:
         cell.border = border
         
         # Пустые ячейки для выравнивания
-        for col in (6, 7, 10, 11, 12, 13, 14):
+        for col in (6, 7, 8, 11, 12, 13, 14, 15):
             cell = ws.cell(row=current_row, column=col)
             cell.fill = PatternFill(start_color="70AD47", end_color="70AD47", fill_type="solid")
             cell.border = border
@@ -298,22 +310,23 @@ class ReportGenerator:
         total_fill = PatternFill(start_color="E2EFDA", end_color="E2EFDA", fill_type="solid")
         total_font = Font(name='Arial', size=11, bold=True)
 
-        ws.merge_cells('A1:N1')
+        ws.merge_cells('A1:O1')
         ws['A1'] = "Общий сводный отчет по подключениям"
         ws['A1'].font = title_font
         ws['A1'].alignment = title_alignment
         
-        ws.merge_cells('A2:N2')
+        ws.merge_cells('A2:O2')
         ws['A2'] = f"Период: {period_name}"
         ws['A2'].font = Font(name='Arial', size=11, bold=True)
         ws['A2'].alignment = cell_alignment
         
-        ws.merge_cells('A3:N3')
+        ws.merge_cells('A3:O3')
         ws['A3'] = f"Дата формирования: {datetime.now().strftime('%d.%m.%Y %H:%M')}"
         ws['A3'].font = Font(name='Arial', size=10)
         ws['A3'].alignment = cell_alignment
 
         headers = [
+            'Дата',
             'Столбец',
             'Тип',
             'Исполнители',
@@ -326,8 +339,8 @@ class ReportGenerator:
             'SNR бокс',
             'ONU',
             'Медиаконверторы',
+            'Комментарий',
             'Связь с подключением',
-            'Дата'
         ]
 
         ws.row_dimensions[5].height = 30
@@ -339,20 +352,21 @@ class ReportGenerator:
             cell.alignment = header_alignment
             cell.border = border
 
-        ws.column_dimensions['A'].width = 12
-        ws.column_dimensions['B'].width = 15
-        ws.column_dimensions['C'].width = 25
-        ws.column_dimensions['D'].width = 30
-        ws.column_dimensions['E'].width = 15
-        ws.column_dimensions['F'].width = 14
-        ws.column_dimensions['G'].width = 14
-        ws.column_dimensions['H'].width = 16
-        ws.column_dimensions['I'].width = 16
-        ws.column_dimensions['J'].width = 18
-        ws.column_dimensions['K'].width = 18
-        ws.column_dimensions['L'].width = 22
-        ws.column_dimensions['M'].width = 20
-        ws.column_dimensions['N'].width = 18
+        ws.column_dimensions['A'].width = 18  # Дата
+        ws.column_dimensions['B'].width = 12  # Столбец
+        ws.column_dimensions['C'].width = 15  # Тип
+        ws.column_dimensions['D'].width = 25  # Исполнители
+        ws.column_dimensions['E'].width = 30  # Адрес
+        ws.column_dimensions['F'].width = 15  # Модель роутера
+        ws.column_dimensions['G'].width = 14  # ВОЛС всего
+        ws.column_dimensions['H'].width = 14  # Витая пара всего
+        ws.column_dimensions['I'].width = 16  # ВОЛС на исполнителя
+        ws.column_dimensions['J'].width = 16  # Витая пара на исполнителя
+        ws.column_dimensions['K'].width = 18  # SNR бокс
+        ws.column_dimensions['L'].width = 18  # ONU
+        ws.column_dimensions['M'].width = 22  # МК
+        ws.column_dimensions['N'].width = 30  # Комментарий
+        ws.column_dimensions['O'].width = 20  # Связь с подключением
 
         current_row = 6
         for idx, conn in enumerate(connections, 1):
@@ -369,7 +383,17 @@ class ReportGenerator:
 
             connection_link = f"Подключение #{conn.get('id')}" if conn.get('id') else "-"
 
+            snr_display = conn.get('snr_spent')
+            if not snr_display or snr_display == '-':
+                snr_model = conn.get('snr_box_model', '-')
+                snr_qty = conn.get('snr_box_quantity', 0) or 0
+                if snr_model and snr_model != '-':
+                    snr_display = f"{snr_model} ({int(snr_qty)} шт.)" if snr_qty else snr_model
+                else:
+                    snr_display = "-"
+
             row_data = [
+                date_str,
                 idx,
                 type_name,
                 executors,
@@ -379,11 +403,11 @@ class ReportGenerator:
                 conn.get('total_twisted_pair_meters', conn.get('twisted_pair_meters', 0)),
                 conn.get('employee_fiber_meters', 0),
                 conn.get('employee_twisted_pair_meters', 0),
-                conn.get('snr_spent', conn.get('snr_box_model', '-')),
+                snr_display,
                 conn.get('onu_spent', '-'),
                 conn.get('media_spent', '-'),
+                conn.get('comment') or "-",
                 connection_link,
-                date_str
             ]
 
             for col_num, value in enumerate(row_data, 1):
@@ -391,7 +415,7 @@ class ReportGenerator:
                 cell.value = value
                 cell.border = border
 
-                if col_num in [6, 7, 8, 9]:
+                if col_num in [7, 8, 9, 10]:
                     cell.alignment = number_alignment
                     cell.number_format = '0.00'
                 else:
@@ -484,18 +508,18 @@ class ReportGenerator:
         deduct_fill = PatternFill(start_color="FCE4D6", end_color="FCE4D6", fill_type="solid")
         
         # Заголовок
-        ws.merge_cells('A1:G1')
+        ws.merge_cells('A1:H1')
         ws['A1'] = f"Движение материалов и роутеров"
         ws['A1'].font = title_font
         ws['A1'].alignment = title_alignment
         
         # Информация
-        ws.merge_cells('A2:G2')
+        ws.merge_cells('A2:H2')
         ws['A2'] = f"Исполнитель: {employee_name}"
         ws['A2'].font = Font(name='Arial', size=11, bold=True)
         ws['A2'].alignment = cell_alignment
         
-        ws.merge_cells('A3:G3')
+        ws.merge_cells('A3:H3')
         ws['A3'] = f"Период: {period_name}"
         ws['A3'].font = Font(name='Arial', size=11)
         ws['A3'].alignment = cell_alignment
@@ -508,7 +532,8 @@ class ReportGenerator:
             'Название',
             'Количество',
             'Остаток',
-            'Связь с подключением'
+            'Связь с подключением',
+            'Комментарий',
         ]
         
         ws.row_dimensions[5].height = 30
@@ -528,6 +553,7 @@ class ReportGenerator:
         ws.column_dimensions['E'].width = 12  # Количество
         ws.column_dimensions['F'].width = 12  # Остаток
         ws.column_dimensions['G'].width = 20  # Связь
+        ws.column_dimensions['H'].width = 28  # Комментарий
         
         # Данные движений
         current_row = 6
@@ -571,7 +597,8 @@ class ReportGenerator:
                 mov['item_name'],
                 quantity_str,
                 balance_str,
-                conn_link
+                conn_link,
+                mov.get('comment') or "-",
             ]
             
             # Определяем цвет фона

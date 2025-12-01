@@ -16,7 +16,8 @@ class ONURepository(BaseRepository):
     """Работа с таблицей employee_onu"""
 
     def add_onu(self, employee_id: int, device_name: str, quantity: int,
-                created_by: Optional[int] = None, connection: Optional[sqlite3.Connection] = None) -> bool:
+                created_by: Optional[int] = None, connection: Optional[sqlite3.Connection] = None,
+                comment: str = "") -> bool:
         """Добавить ONU сотруднику"""
         own_connection = connection is None
         conn = connection or self.get_connection()
@@ -56,6 +57,7 @@ class ONURepository(BaseRepository):
                 new_quantity,
                 None,
                 created_by,
+                comment=comment,
                 cursor=cursor,
             ):
                 raise RuntimeError("Не удалось записать лог движения ONU")
@@ -80,6 +82,7 @@ class ONURepository(BaseRepository):
         connection_id: Optional[int] = None,
         created_by: Optional[int] = None,
         connection: Optional[sqlite3.Connection] = None,
+        comment: str = "",
     ) -> bool:
         """Списать ONU у сотрудника"""
         own_connection = connection is None
@@ -119,6 +122,7 @@ class ONURepository(BaseRepository):
                 new_quantity,
                 connection_id,
                 created_by,
+                comment=comment,
                 cursor=cursor,
             ):
                 raise RuntimeError("Не удалось записать лог движения ONU")

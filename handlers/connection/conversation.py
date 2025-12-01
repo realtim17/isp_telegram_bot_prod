@@ -9,7 +9,8 @@ from config import (
     ENTER_ROUTER_QUANTITY_CONNECTION, ROUTER_ACCESS, ENTER_PORT, ENTER_FIBER,
     ENTER_TWISTED, CONTRACT_SIGNED, TELEGRAM_BOT_CONFIRM, SELECT_EMPLOYEES, 
     SELECT_MATERIAL_PAYER, SELECT_ROUTER_PAYER, SELECT_SNR_BOX, SELECT_SNR_PAYER, CONFIRM,
-    SELECT_ONU_ACTION, ENTER_ONU_QUANTITY, SELECT_MEDIA_ACTION, ENTER_MEDIA_QUANTITY
+    SELECT_ONU_ACTION, ENTER_ONU_QUANTITY, SELECT_MEDIA_ACTION, ENTER_MEDIA_QUANTITY,
+    ENTER_COMMENT, ENTER_SNR_QUANTITY_CONNECTION
 )
 
 # Импорт обработчиков шагов
@@ -28,10 +29,12 @@ from handlers.connection.steps import (
     contract_signed,
     telegram_bot_confirm,
     select_snr_box,
+    enter_snr_quantity_connection,
     select_onu_connection,
     enter_onu_quantity_connection,
     select_media_connection,
-    enter_media_quantity_connection
+    enter_media_quantity_connection,
+    enter_comment,
 )
 
 # Импорт обработчиков выбора исполнителей
@@ -69,6 +72,12 @@ def build_connection_conversation(db) -> ConversationHandler:
     
     async def select_snr_box_wrapper(update, context):
         return await select_snr_box(update, context, db)
+
+    async def enter_snr_quantity_wrapper(update, context):
+        return await enter_snr_quantity_connection(update, context, db)
+
+    async def enter_twisted_wrapper(update, context):
+        return await enter_twisted(update, context, db)
     
     async def select_onu_wrapper(update, context):
         return await select_onu_connection(update, context, db)
@@ -81,6 +90,9 @@ def build_connection_conversation(db) -> ConversationHandler:
     
     async def enter_media_quantity_wrapper(update, context):
         return await enter_media_quantity_connection(update, context, db)
+    
+    async def enter_comment_wrapper(update, context):
+        return await enter_comment(update, context, db)
     
     async def select_employee_toggle_wrapper(update, context):
         return await select_employee_toggle(update, context, db)
@@ -122,28 +134,31 @@ def build_connection_conversation(db) -> ConversationHandler:
             ENTER_ROUTER_QUANTITY_CONNECTION: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, enter_router_quantity_connection)
             ],
-        ROUTER_ACCESS: [
-            CallbackQueryHandler(router_access_handler, pattern='^(router_access_confirmed|router_access_skipped|cancel_connection)$')
-        ],
-        ENTER_PORT: [
-            CallbackQueryHandler(enter_port, pattern='^port_skip$'),
-            CallbackQueryHandler(cancel_connection, pattern='^cancel_connection$'),
-            MessageHandler(filters.TEXT & ~filters.COMMAND, enter_port)
-        ],
+            ROUTER_ACCESS: [
+                CallbackQueryHandler(router_access_handler, pattern='^(router_access_confirmed|router_access_skipped|cancel_connection)$')
+            ],
+            ENTER_PORT: [
+                CallbackQueryHandler(enter_port, pattern='^port_skip$'),
+                CallbackQueryHandler(cancel_connection, pattern='^cancel_connection$'),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, enter_port)
+            ],
             ENTER_FIBER: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, enter_fiber)
             ],
             ENTER_TWISTED: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, enter_twisted)
+                MessageHandler(filters.TEXT & ~filters.COMMAND, enter_twisted_wrapper)
             ],
             CONTRACT_SIGNED: [
-                CallbackQueryHandler(contract_signed, pattern='^(contract_confirmed|cancel_connection)$')
+                CallbackQueryHandler(contract_signed, pattern='^(contract_confirmed|contract_skipped|cancel_connection)$')
             ],
             TELEGRAM_BOT_CONFIRM: [
                 CallbackQueryHandler(telegram_bot_confirm_wrapper, pattern='^(telegram_bot_confirmed|telegram_bot_skipped|cancel_connection)$')
             ],
             SELECT_SNR_BOX: [
                 CallbackQueryHandler(select_snr_box_wrapper, pattern='^(snr_box_.*|snr_skip|cancel_connection)$')
+            ],
+            ENTER_SNR_QUANTITY_CONNECTION: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, enter_snr_quantity_wrapper)
             ],
             SELECT_ONU_ACTION: [
                 CallbackQueryHandler(select_onu_wrapper, pattern='^(conn_onu_.*|conn_onu_skip|cancel_connection)$')
@@ -156,6 +171,9 @@ def build_connection_conversation(db) -> ConversationHandler:
             ],
             ENTER_MEDIA_QUANTITY: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, enter_media_quantity_wrapper)
+            ],
+            ENTER_COMMENT: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, enter_comment_wrapper)
             ],
             SELECT_EMPLOYEES: [
                 CallbackQueryHandler(select_employee_toggle_wrapper, pattern='^(emp_.*|employees_done)$'),

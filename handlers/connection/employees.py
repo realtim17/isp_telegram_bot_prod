@@ -54,7 +54,7 @@ async def start_employee_selection(
     if pre_text:
         message_parts.append(pre_text)
     message_parts.append(
-        "👥 <b>Шаг 15/15: Выбор исполнителей</b>\n\n"
+        "👥 <b>Шаг 16/16: Выбор исполнителей</b>\n\n"
         "Выберите сотрудников, которые участвовали в подключении:\n"
         "(можно выбрать нескольких)"
     )

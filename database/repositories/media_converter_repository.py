@@ -16,7 +16,8 @@ class MediaConverterRepository(BaseRepository):
     """Работа с таблицей employee_media_converters"""
 
     def add_converter(self, employee_id: int, device_name: str, quantity: int,
-                      created_by: Optional[int] = None, connection: Optional[sqlite3.Connection] = None) -> bool:
+                      created_by: Optional[int] = None, connection: Optional[sqlite3.Connection] = None,
+                      comment: str = "") -> bool:
         conn = connection or self.get_connection()
         own_connection = connection is None
         try:
@@ -55,6 +56,7 @@ class MediaConverterRepository(BaseRepository):
                 new_quantity,
                 None,
                 created_by,
+                comment=comment,
                 cursor=cursor,
             ):
                 raise RuntimeError("Не удалось записать лог движения медиаконверторов")
@@ -79,6 +81,7 @@ class MediaConverterRepository(BaseRepository):
         connection_id: Optional[int] = None,
         created_by: Optional[int] = None,
         connection: Optional[sqlite3.Connection] = None,
+        comment: str = "",
     ) -> bool:
         conn = connection or self.get_connection()
         own_connection = connection is None
@@ -118,6 +121,7 @@ class MediaConverterRepository(BaseRepository):
                 new_quantity,
                 connection_id,
                 created_by,
+                comment=comment,
                 cursor=cursor,
             ):
                 raise RuntimeError("Не удалось записать лог движения медиаконверторов")

@@ -6,6 +6,7 @@ from telegram.ext import ContextTypes, ConversationHandler
 
 from utils.keyboards import get_main_keyboard
 from handlers.connection.constants import CANCEL_TEXT, INTERRUPTED_TEXT
+from handlers.commands import clear_all_conversations
 
 
 async def cancel_connection(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -44,9 +45,16 @@ async def cancel_by_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
 async def cancel_by_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Отмена через команду /cancel"""
-    context.user_data.clear()
     text = update.message.text if update.message else ""
-    if text and text.strip().lower().startswith("/stop"):
+    is_stop = text and text.strip().lower().startswith("/stop")
+    
+    if is_stop:
+        clear_all_conversations(context)
+    else:
+        context.user_data.clear()
+    
+    text = update.message.text if update.message else ""
+    if is_stop:
         msg = "⏹️ Все активные действия остановлены."
     else:
         msg = CANCEL_TEXT

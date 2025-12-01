@@ -8,7 +8,7 @@ from telegram.ext import ContextTypes, ConversationHandler
 
 from config import CONFIRM, CONNECTION_TYPES, logger
 from utils.keyboards import get_main_keyboard
-from utils.helpers import send_connection_report, run_in_thread
+from utils.helpers import send_connection_report, run_in_thread, _format_report_text
 
 
 async def show_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE, db) -> int:
@@ -43,21 +43,19 @@ async def show_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE, 
     fiber_per_emp = round(data['fiber_meters'] / max(emp_count, 1), 2)
     twisted_per_emp = round(data['twisted_pair_meters'] / max(emp_count, 1), 2)
     
-    # Получаем информацию о плательщиках
+    # Единый материально ответственный для всех списаний
     material_payer_id = context.user_data.get('material_payer_id')
-    router_payer_id = context.user_data.get('router_payer_id')
-    snr_box_payer_id = context.user_data.get('snr_box_payer_id')
-    # ONU/медиаконверторы по умолчанию списываются с первого исполнителя
-    onu_payer_id = context.user_data.get('onu_payer_id')
-    media_payer_id = context.user_data.get('media_payer_id')
-    if not onu_payer_id and selected_employees:
-        onu_payer_id = selected_employees[0]
-        context.user_data['onu_payer_id'] = onu_payer_id
-    if not media_payer_id and selected_employees:
-        media_payer_id = selected_employees[0]
-        context.user_data['media_payer_id'] = media_payer_id
-    snr_box_payer_id = context.user_data.get('snr_box_payer_id')
-    snr_box_payer_id = context.user_data.get('snr_box_payer_id')
+    if not material_payer_id and selected_employees:
+        material_payer_id = selected_employees[0]
+        context.user_data['material_payer_id'] = material_payer_id
+    router_payer_id = material_payer_id
+    snr_box_payer_id = material_payer_id
+    onu_payer_id = material_payer_id
+    media_payer_id = material_payer_id
+    context.user_data['router_payer_id'] = router_payer_id
+    context.user_data['snr_box_payer_id'] = snr_box_payer_id
+    context.user_data['onu_payer_id'] = onu_payer_id
+    context.user_data['media_payer_id'] = media_payer_id
     
     payer_info = ""
     if material_payer_id:
@@ -87,7 +85,9 @@ async def show_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE, 
             if snr_payer:
                 employee_map[snr_box_payer_id] = snr_payer
         if snr_payer:
-            payer_info += f"\n🧰 <b>SNR бокс списывается с:</b> {snr_payer['full_name']}"
+            qty = data.get('snr_box_quantity', 0) or 0
+            quantity_text = f" ({int(qty)} шт.)" if qty else ""
+            payer_info += f"\n🧰 <b>SNR бокс списывается с:</b> {snr_payer['full_name']}{quantity_text}"
 
     onu_payer_id = context.user_data.get('onu_payer_id')
     media_payer_id = context.user_data.get('media_payer_id')
@@ -118,6 +118,7 @@ async def show_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE, 
     router_model = data.get('router_model', '-')
     router_quantity = data.get('router_quantity', 1)
     snr_box_model = data.get('snr_box_model', '-') or '-'
+    snr_box_quantity = data.get('snr_box_quantity', 0) or 0
     onu_model = data.get('onu_model', '-') or '-'
     onu_quantity = data.get('onu_quantity', 0) or 0
     media_model = data.get('media_converter_model', '-') or '-'
@@ -130,7 +131,11 @@ async def show_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE, 
         if router_quantity > 1:
             router_display += f" ({router_quantity} шт.)"
     
-    snr_display = snr_box_model if snr_box_model and snr_box_model != '-' else "-"
+    snr_display = "-"
+    if snr_box_model and snr_box_model != '-':
+        snr_display = snr_box_model
+        if snr_box_quantity > 0:
+            snr_display += f" ({snr_box_quantity} шт.)"
     
     if onu_model == '-' or not onu_model:
         onu_display = "-"
@@ -161,36 +166,14 @@ async def show_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE, 
     # Получаем информацию о Телеграмм Боте
     telegram_bot_connected = data.get('telegram_bot_connected', False)
     telegram_bot_status = "✅ Подключен" if telegram_bot_connected else "-"
+    comment_text = data.get('comment') or "-"
     
-    confirmation_text = f"""
-<b>📋 Подтверждение данных</b>
-
-<b>📍 Адрес:</b> {data['address']}
-<b>Тип подключения:</b> {type_name}
-<b>Модель роутера:</b> {router_display}
-<b>SNR бокс:</b> {snr_display}
-<b>ONU абон.терминал:</b> {onu_display}
-<b>Медиаконвертор:</b> {media_display}
-<b>Доступ на роутер:</b> {router_access_status}
-<b>Договор:</b> {contract_status}
-<b>Телеграмм Бот:</b> {telegram_bot_status}
-<b>Порт:</b> {port_display}
-
-<b>📏 Проложенный кабель:</b>
-  • ВОЛС: {data['fiber_meters']} м
-  • Витая пара: {data['twisted_pair_meters']} м
-
-<b>👥 Исполнители ({emp_count}):</b>
-{chr(10).join(['  • ' + name for name in employee_names])}
-
-<b>💡 Расчет на каждого исполнителя:</b>
-  • ВОЛС: {fiber_per_emp} м
-  • Витая пара: {twisted_per_emp} м{payer_info}
-
-<b>📸 Фото:</b> {len(photos)} шт.
-
-Всё верно? Подтвердите создание отчета.
-"""
+    report_preview = _format_report_text("ПРЕДПРОСМОТР", data, employee_names).strip()
+    confirmation_text = (
+        f"{report_preview}{payer_info}"
+        f"\n\n📸 Фото: {len(photos)} шт."
+        f"\n\nВсё верно? Подтвердите создание отчета."
+    )
     
     keyboard = [
         [InlineKeyboardButton("✅ Подтвердить", callback_data='confirm_yes')],
@@ -211,87 +194,123 @@ async def confirm_connection(update: Update, context: ContextTypes.DEFAULT_TYPE,
     """Подтверждение и сохранение подключения"""
     query = update.callback_query
     await query.answer()
-    
-    if query.data == 'confirm_no':
+    try:
+        if query.data == 'confirm_no':
+            context.user_data.clear()
+            await query.edit_message_text(
+                "❌ Создание отчета отменено.",
+                reply_markup=None
+            )
+            await query.message.reply_text(
+                "Выберите действие:",
+                reply_markup=get_main_keyboard()
+            )
+            return ConversationHandler.END
+        
+        # Сохраняем в БД
+        data = context.user_data.get('connection_data')
+        selected_employees = context.user_data.get('selected_employees', [])
+        if not data or not selected_employees:
+            context.user_data.clear()
+            await query.edit_message_text(
+                "❌ Недостаточно данных для сохранения отчета. Попробуйте начать заново.",
+                reply_markup=None,
+                parse_mode='HTML'
+            )
+            await query.message.reply_text("Выберите действие:", reply_markup=get_main_keyboard())
+            return ConversationHandler.END
+
+        photos = context.user_data.get('photos', [])
+        material_payer_id = context.user_data.get('material_payer_id')
+        router_payer_id = context.user_data.get('router_payer_id')
+        snr_box_payer_id = context.user_data.get('snr_box_payer_id')
+        onu_payer_id = context.user_data.get('onu_payer_id')
+        media_payer_id = context.user_data.get('media_payer_id')
+        user_id = update.effective_user.id
+        
+        onu_model = data.get('onu_model', '-')
+        onu_quantity = data.get('onu_quantity', 0) or 0
+        media_model = data.get('media_converter_model', '-')
+        media_quantity = data.get('media_converter_quantity', 0) or 0
+        
+        router_quantity = data.get('router_quantity', 1)
+        contract_signed = data.get('contract_signed', False)
+        router_access = data.get('router_access', False)
+        telegram_bot_connected = data.get('telegram_bot_connected', False)
+        snr_box_model = data.get('snr_box_model', '-')
+        snr_box_quantity = data.get('snr_box_quantity', 0) or 0
+        
+        try:
+            connection_id = await run_in_thread(
+                db.create_connection,
+                connection_type=data.get('connection_type', 'mkd'),
+                address=data['address'],
+                router_model=data['router_model'],
+                snr_box_model=snr_box_model,
+                port=data['port'],
+                fiber_meters=data['fiber_meters'],
+                twisted_pair_meters=data['twisted_pair_meters'],
+                employee_ids=selected_employees,
+                photo_file_ids=photos,
+                created_by=user_id,
+                material_payer_id=material_payer_id,
+                router_quantity=router_quantity,
+                contract_signed=contract_signed,
+                router_access=router_access,
+                telegram_bot_connected=telegram_bot_connected,
+                router_payer_id=router_payer_id,
+                snr_box_payer_id=snr_box_payer_id,
+                snr_box_quantity=snr_box_quantity,
+                onu_model=onu_model,
+                onu_quantity=onu_quantity,
+                onu_payer_id=onu_payer_id,
+                media_converter_model=media_model,
+                media_converter_quantity=media_quantity,
+                media_payer_id=media_payer_id,
+                comment=data.get('comment', ''),
+            )
+        except Exception as exc:
+            logger.exception("Ошибка при сохранении подключения: %s", exc)
+            context.user_data.clear()
+            reason = str(exc) or "Неизвестная ошибка"
+            await query.edit_message_text(
+                f"❌ Не удалось сохранить подключение: {reason}",
+                parse_mode='HTML'
+            )
+            await query.message.reply_text(
+                "Выберите действие:",
+                reply_markup=get_main_keyboard()
+            )
+            return ConversationHandler.END
+        
+        if connection_id:
+            await query.edit_message_text(
+                f"✅ <b>Отчет успешно создан!</b>\n\n"
+                f"ID подключения: #{connection_id}\n"
+                f"Дата: {datetime.now().strftime('%d.%m.%Y %H:%M')}",
+                parse_mode='HTML'
+            )
+            
+            await send_connection_report(query.message, connection_id, data, photos, selected_employees, db)
+            
+            await query.message.reply_text(
+                "Выберите следующее действие:",
+                reply_markup=get_main_keyboard()
+            )
+        else:
+            await query.edit_message_text(
+                "❌ Ошибка при создании отчета. Попробуйте позже.",
+                parse_mode='HTML'
+            )
+        
+        context.user_data.clear()
+        return ConversationHandler.END
+    except Exception as exc:
+        logger.exception("Ошибка при подтверждении подключения: %s", exc)
         context.user_data.clear()
         await query.edit_message_text(
-            "❌ Создание отчета отменено.",
-            reply_markup=None
+            "❌ Произошла ошибка при сохранении подключения. Попробуйте начать заново.",
+            parse_mode='HTML'
         )
-        await query.message.reply_text(
-            "Выберите действие:",
-            reply_markup=get_main_keyboard()
-        )
+        await query.message.reply_text("Выберите действие:", reply_markup=get_main_keyboard())
         return ConversationHandler.END
-    
-    # Сохраняем в БД
-    data = context.user_data['connection_data']
-    photos = context.user_data.get('photos', [])
-    selected_employees = context.user_data.get('selected_employees', [])
-    material_payer_id = context.user_data.get('material_payer_id')
-    router_payer_id = context.user_data.get('router_payer_id')
-    snr_box_payer_id = context.user_data.get('snr_box_payer_id')
-    user_id = update.effective_user.id
-    
-    onu_model = data.get('onu_model', '-')
-    onu_quantity = data.get('onu_quantity', 0) or 0
-    media_model = data.get('media_converter_model', '-')
-    media_quantity = data.get('media_converter_quantity', 0) or 0
-    
-    router_quantity = data.get('router_quantity', 1)
-    contract_signed = data.get('contract_signed', False)
-    router_access = data.get('router_access', False)
-    telegram_bot_connected = data.get('telegram_bot_connected', False)
-    snr_box_model = data.get('snr_box_model', '-')
-    
-    connection_id = await run_in_thread(
-        db.create_connection,
-        connection_type=data.get('connection_type', 'mkd'),
-        address=data['address'],
-        router_model=data['router_model'],
-        snr_box_model=snr_box_model,
-        port=data['port'],
-        fiber_meters=data['fiber_meters'],
-        twisted_pair_meters=data['twisted_pair_meters'],
-        employee_ids=selected_employees,
-        photo_file_ids=photos,
-        created_by=user_id,
-        material_payer_id=material_payer_id,
-        router_quantity=router_quantity,
-        contract_signed=contract_signed,
-        router_access=router_access,
-        telegram_bot_connected=telegram_bot_connected,
-        router_payer_id=router_payer_id,
-        snr_box_payer_id=snr_box_payer_id,
-        onu_model=onu_model,
-        onu_quantity=onu_quantity,
-        onu_payer_id=onu_payer_id,
-        media_converter_model=media_model,
-        media_converter_quantity=media_quantity,
-        media_payer_id=media_payer_id,
-    )
-    
-    if connection_id:
-        # Отправляем подтверждение
-        await query.edit_message_text(
-            f"✅ <b>Отчет успешно создан!</b>\n\n"
-            f"ID подключения: #{connection_id}\n"
-            f"Дата: {datetime.now().strftime('%d.%m.%Y %H:%M')}",
-            parse_mode='HTML'
-        )
-        
-        # Отправляем отчет с фотографиями
-        await send_connection_report(query.message, connection_id, data, photos, selected_employees, db)
-        
-        await query.message.reply_text(
-            "Выберите следующее действие:",
-            reply_markup=get_main_keyboard()
-        )
-    else:
-        await query.edit_message_text(
-            "❌ Ошибка при создании отчета. Попробуйте позже.",
-            parse_mode='HTML'
-        )
-    
-    context.user_data.clear()
-    return ConversationHandler.END

@@ -12,6 +12,7 @@ from config import (
     ENTER_FIBER_AMOUNT,
     ENTER_TWISTED_AMOUNT,
     CONFIRM_MATERIAL_OPERATION,
+    ENTER_OPERATION_COMMENT,
 )
 from utils.keyboards import get_main_keyboard
 from utils.helpers import run_in_thread
@@ -100,8 +101,9 @@ async def select_material_action(
     context.user_data["material_action"] = action
 
     verb = "Добавление" if action == "add" else "Списание"
+    prefix = "➕" if action == "add" else "➖"
     await query.edit_message_text(
-        f"➕ <b>{verb} материалов</b>\n\n"
+        f"{prefix} <b>{verb} материалов</b>\n\n"
         f"👤 Сотрудник: {employee['full_name']}\n\n"
         "Введите количество метров <b>ВОЛС</b>:\n"
         "(Введите 0, если не требуется)",
@@ -155,26 +157,9 @@ async def enter_twisted_amount(
     emp_id = context.user_data.get("selected_employee_id")
     employee = await run_in_thread(flow.db.get_employee_by_id, emp_id)
     action = context.user_data.get("material_action")
-    sign = "+" if action == "add" else "-"
+    context.user_data.setdefault("material_comment", "")
 
-    keyboard = InlineKeyboardMarkup(
-        [
-            [InlineKeyboardButton("✅ Подтвердить", callback_data="material_confirm")],
-            [InlineKeyboardButton("✏️ Изменить", callback_data="material_edit")],
-            [InlineKeyboardButton("❌ Отмена", callback_data="material_cancel")],
-        ]
-    )
-
-    await update.message.reply_text(
-        f"👤 Сотрудник: <b>{employee['full_name']}</b>\n"
-        f"📦 Действие: {'добавление' if sign == '+' else 'списание'}\n\n"
-        f"ВОЛС: {sign}{context.user_data.get('fiber_amount', 0)} м\n"
-        f"Витая пара: {sign}{twisted_amount} м\n\n"
-        "Подтвердить операцию?",
-        parse_mode="HTML",
-        reply_markup=keyboard,
-    )
-    return CONFIRM_MATERIAL_OPERATION
+    return await show_material_confirmation(flow, update.message, context, employee, action)
 
 
 async def confirm_material_operation(
@@ -199,6 +184,14 @@ async def confirm_material_operation(
         context.user_data.pop("fiber_amount", None)
         context.user_data.pop("twisted_amount", None)
         return ENTER_FIBER_AMOUNT
+    
+    if data == "material_comment":
+        context.user_data["comment_target"] = "material"
+        await query.edit_message_text(
+            "📝 Введите комментарий к операции (например, причина списания или примечание):",
+            parse_mode="HTML",
+        )
+        return ENTER_OPERATION_COMMENT
 
     if data != "material_confirm":
         return CONFIRM_MATERIAL_OPERATION
@@ -207,6 +200,7 @@ async def confirm_material_operation(
     fiber_amount = context.user_data.get("fiber_amount", 0)
     twisted_amount = context.user_data.get("twisted_amount", 0)
     action = context.user_data.get("material_action")
+    comment = context.user_data.get("material_comment", "")
     employee = await run_in_thread(flow.db.get_employee_by_id, emp_id)
 
     if not employee:
@@ -224,6 +218,7 @@ async def confirm_material_operation(
             fiber_amount,
             twisted_amount,
             created_by,
+            comment,
         )
         if success:
             updated_emp = await run_in_thread(flow.db.get_employee_by_id, emp_id)
@@ -246,6 +241,7 @@ async def confirm_material_operation(
             twisted_amount,
             None,
             created_by,
+            comment,
         )
         if success:
             updated_emp = await run_in_thread(flow.db.get_employee_by_id, emp_id)
@@ -272,3 +268,44 @@ async def confirm_material_operation(
     context.user_data.clear()
     await query.message.reply_text("Выберите действие:", reply_markup=get_main_keyboard())
     return ConversationHandler.END
+
+
+def _material_confirmation_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        [
+            [InlineKeyboardButton("✅ Подтвердить", callback_data="material_confirm")],
+            [InlineKeyboardButton("✏️ Изменить", callback_data="material_edit")],
+            [InlineKeyboardButton("📝 Добавить комментарий", callback_data="material_comment")],
+            [InlineKeyboardButton("❌ Отмена", callback_data="material_cancel")],
+        ]
+    )
+
+
+def _material_confirmation_text(employee_name: str, action: str, fiber_amount: float, twisted_amount: float, comment: str) -> str:
+    sign = "+" if action == "add" else "-"
+    action_word = "добавление" if action == "add" else "списание"
+    comment_text = comment or "—"
+    return (
+        f"👤 Сотрудник: <b>{employee_name}</b>\n"
+        f"📦 Действие: {action_word}\n\n"
+        f"ВОЛС: {sign}{fiber_amount} м\n"
+        f"Витая пара: {sign}{twisted_amount} м\n"
+        f"📝 Комментарий: {comment_text}\n\n"
+        "Подтвердить операцию?"
+    )
+
+
+async def show_material_confirmation(flow: "EmployeeFlow", message, context: ContextTypes.DEFAULT_TYPE, employee: dict, action: str):
+    text = _material_confirmation_text(
+        employee.get("full_name", "—") if isinstance(employee, dict) else "—",
+        action,
+        context.user_data.get("fiber_amount", 0),
+        context.user_data.get("twisted_amount", 0),
+        context.user_data.get("material_comment", ""),
+    )
+    await message.reply_text(
+        text,
+        parse_mode="HTML",
+        reply_markup=_material_confirmation_keyboard(),
+    )
+    return CONFIRM_MATERIAL_OPERATION

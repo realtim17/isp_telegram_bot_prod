@@ -19,6 +19,7 @@ class SNRBoxRepository(BaseRepository):
         box_name: str,
         quantity: int,
         created_by: Optional[int] = None,
+        comment: str = "",
         connection: Optional[sqlite3.Connection] = None,
     ) -> bool:
         """Добавить боксы сотруднику"""
@@ -58,6 +59,7 @@ class SNRBoxRepository(BaseRepository):
                 new_quantity,
                 None,
                 created_by,
+                comment=comment,
                 cursor=cursor
             ):
                 raise RuntimeError("Не удалось записать движение по боксам")
@@ -82,6 +84,7 @@ class SNRBoxRepository(BaseRepository):
         quantity: int = 1,
         connection_id: Optional[int] = None,
         created_by: Optional[int] = None,
+        comment: str = "",
         connection: Optional[sqlite3.Connection] = None,
     ) -> bool:
         """Списать боксы у сотрудника"""
@@ -125,6 +128,7 @@ class SNRBoxRepository(BaseRepository):
                 new_quantity,
                 connection_id,
                 created_by,
+                comment=comment,
                 cursor=cursor
             ):
                 raise RuntimeError("Не удалось записать движение по боксам")

@@ -12,6 +12,7 @@ from config import (
     ENTER_SNR_NAME,
     ENTER_SNR_QUANTITY,
     CONFIRM_SNR_OPERATION,
+    ENTER_OPERATION_COMMENT,
 )
 from utils.keyboards import get_main_keyboard
 from utils.helpers import run_in_thread
@@ -168,25 +169,8 @@ async def enter_snr_quantity(flow: "EmployeeFlow", update: Update, context: Cont
     employee = await run_in_thread(flow.db.get_employee_by_id, emp_id) if emp_id else None
     action = context.user_data.get("snr_action", "add")
     box_name = context.user_data.get("snr_box_name")
-    action_word = "добавление" if action == "add" else "списание"
-    sign = "+" if action == "add" else "-"
-    keyboard = InlineKeyboardMarkup(
-        [
-            [InlineKeyboardButton("✅ Подтвердить", callback_data="snr_confirm")],
-            [InlineKeyboardButton("✏️ Изменить количество", callback_data="snr_edit")],
-            [InlineKeyboardButton("❌ Отмена", callback_data="snr_cancel")],
-        ]
-    )
-    await update.message.reply_text(
-        "Проверьте данные и подтвердите операцию:\n\n"
-        f"👤 Сотрудник: <b>{employee['full_name'] if employee else emp_id}</b>\n"
-        f"🧰 Бокс: {box_name}\n"
-        f"Действие: {action_word}\n"
-        f"Количество: {sign}{quantity} шт.",
-        reply_markup=keyboard,
-        parse_mode="HTML",
-    )
-    return CONFIRM_SNR_OPERATION
+    context.user_data.setdefault("snr_comment", "")
+    return await show_snr_confirmation(update.message, employee, box_name, action, quantity, context)
 
 
 async def confirm_snr_operation(flow: "EmployeeFlow", update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -205,6 +189,14 @@ async def confirm_snr_operation(flow: "EmployeeFlow", update: Update, context: C
         context.user_data.pop("snr_box_quantity", None)
         return ENTER_SNR_QUANTITY
     
+    if data == "snr_comment":
+        context.user_data["comment_target"] = "snr"
+        await query.edit_message_text(
+            "📝 Введите комментарий к операции с боксом:",
+            parse_mode="HTML",
+        )
+        return ENTER_OPERATION_COMMENT
+    
     if data != "snr_confirm":
         return CONFIRM_SNR_OPERATION
     
@@ -212,6 +204,7 @@ async def confirm_snr_operation(flow: "EmployeeFlow", update: Update, context: C
     box_name = context.user_data.get("snr_box_name")
     quantity = context.user_data.get("snr_box_quantity", 0)
     action = context.user_data.get("snr_action")
+    comment = context.user_data.get("snr_comment", "")
     
     employee = await run_in_thread(flow.db.get_employee_by_id, emp_id)
     if not employee:
@@ -222,7 +215,7 @@ async def confirm_snr_operation(flow: "EmployeeFlow", update: Update, context: C
     
     created_by = query.from_user.id if query and query.from_user else None
     if action == "add":
-        success = await run_in_thread(flow.db.add_snr_box_to_employee, emp_id, box_name, quantity, created_by)
+        success = await run_in_thread(flow.db.add_snr_box_to_employee, emp_id, box_name, quantity, created_by, comment)
         if success:
             new_qty = await run_in_thread(flow.db.get_snr_box_quantity, emp_id, box_name)
             text = (
@@ -242,6 +235,7 @@ async def confirm_snr_operation(flow: "EmployeeFlow", update: Update, context: C
             quantity,
             None,
             created_by,
+            comment,
         )
         if success:
             new_qty = await run_in_thread(flow.db.get_snr_box_quantity, emp_id, box_name)
@@ -259,3 +253,44 @@ async def confirm_snr_operation(flow: "EmployeeFlow", update: Update, context: C
     context.user_data.clear()
     await query.message.reply_text("Выберите действие:", reply_markup=get_main_keyboard())
     return ConversationHandler.END
+
+
+def _snr_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        [
+            [InlineKeyboardButton("✅ Подтвердить", callback_data="snr_confirm")],
+            [InlineKeyboardButton("✏️ Изменить количество", callback_data="snr_edit")],
+            [InlineKeyboardButton("📝 Добавить комментарий", callback_data="snr_comment")],
+            [InlineKeyboardButton("❌ Отмена", callback_data="snr_cancel")],
+        ]
+    )
+
+
+def _snr_confirmation_text(employee_name: str, box_name: str, quantity: int, action: str, comment: str) -> str:
+    action_word = "добавление" if action == "add" else "списание"
+    sign = "+" if action == "add" else "-"
+    comment_text = comment or "—"
+    return (
+        "Проверьте данные и подтвердите операцию:\n\n"
+        f"👤 Сотрудник: <b>{employee_name}</b>\n"
+        f"🧰 Бокс: {box_name}\n"
+        f"Действие: {action_word}\n"
+        f"Количество: {sign}{quantity} шт.\n"
+        f"📝 Комментарий: {comment_text}"
+    )
+
+
+async def show_snr_confirmation(message, employee: dict, box_name: str, action: str, quantity: int, context: ContextTypes.DEFAULT_TYPE):
+    text = _snr_confirmation_text(
+        employee.get("full_name", "—") if employee else "—",
+        box_name,
+        quantity,
+        action,
+        context.user_data.get("snr_comment", ""),
+    )
+    await message.reply_text(
+        text,
+        reply_markup=_snr_keyboard(),
+        parse_mode="HTML",
+    )
+    return CONFIRM_SNR_OPERATION

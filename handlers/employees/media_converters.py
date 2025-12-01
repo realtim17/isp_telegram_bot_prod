@@ -12,6 +12,7 @@ from config import (
     ENTER_MEDIA_NAME,
     ENTER_MEDIA_QUANTITY,
     CONFIRM_MEDIA_OPERATION,
+    ENTER_OPERATION_COMMENT,
 )
 from utils.keyboards import get_main_keyboard
 from utils.helpers import run_in_thread
@@ -175,25 +176,8 @@ async def enter_media_quantity(flow: "EmployeeFlow", update: Update, context: Co
     employee = await run_in_thread(flow.db.get_employee_by_id, emp_id) if emp_id else None
     device_name = context.user_data.get("media_name")
     action = context.user_data.get("media_action", "add")
-    sign = "+" if action == "add" else "-"
-    action_word = "добавление" if action == "add" else "списание"
-    keyboard = InlineKeyboardMarkup(
-        [
-            [InlineKeyboardButton("✅ Подтвердить", callback_data="media_confirm")],
-            [InlineKeyboardButton("✏️ Изменить количество", callback_data="media_edit")],
-            [InlineKeyboardButton("❌ Отмена", callback_data="manage_cancel")],
-        ]
-    )
-    await update.message.reply_text(
-        "Проверьте данные и подтвердите операцию:\n\n"
-        f"👤 Сотрудник: <b>{employee['full_name'] if employee else emp_id}</b>\n"
-        f"🔄 Медиаконвертор: {device_name}\n"
-        f"Действие: {action_word}\n"
-        f"Количество: {sign}{quantity} шт.",
-        reply_markup=keyboard,
-        parse_mode="HTML",
-    )
-    return CONFIRM_MEDIA_OPERATION
+    context.user_data.setdefault("media_comment", "")
+    return await show_media_confirmation(update.message, employee, device_name, action, quantity, context)
 
 
 async def confirm_media_operation(flow: "EmployeeFlow", update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -212,6 +196,14 @@ async def confirm_media_operation(flow: "EmployeeFlow", update: Update, context:
         context.user_data.pop("media_quantity", None)
         return ENTER_MEDIA_QUANTITY
 
+    if data == "media_comment":
+        context.user_data["comment_target"] = "media"
+        await query.edit_message_text(
+            "📝 Введите комментарий к операции с медиаконвертором:",
+            parse_mode="HTML",
+        )
+        return ENTER_OPERATION_COMMENT
+
     if data != "media_confirm":
         return CONFIRM_MEDIA_OPERATION
 
@@ -220,13 +212,14 @@ async def confirm_media_operation(flow: "EmployeeFlow", update: Update, context:
     quantity = context.user_data.get("media_quantity", 0)
     action = context.user_data.get("media_action")
     created_by = query.from_user.id if query.from_user else None
+    comment = context.user_data.get("media_comment", "")
 
     if not emp_id or not device_name or quantity <= 0:
         await query.edit_message_text("❌ Некорректные данные операции.")
         return ConversationHandler.END
 
     if action == "add":
-        success = await run_in_thread(flow.db.add_media_converter_to_employee, emp_id, device_name, quantity, created_by)
+        success = await run_in_thread(flow.db.add_media_converter_to_employee, emp_id, device_name, quantity, created_by, comment)
     else:
         success = await run_in_thread(
             flow.db.deduct_media_converter_from_employee,
@@ -235,6 +228,7 @@ async def confirm_media_operation(flow: "EmployeeFlow", update: Update, context:
             quantity,
             None,
             created_by,
+            comment,
         )
 
     if success:
@@ -254,3 +248,44 @@ async def confirm_media_operation(flow: "EmployeeFlow", update: Update, context:
     context.user_data.clear()
     await query.message.reply_text("Выберите действие:", reply_markup=get_main_keyboard())
     return ConversationHandler.END
+
+
+def _media_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        [
+            [InlineKeyboardButton("✅ Подтвердить", callback_data="media_confirm")],
+            [InlineKeyboardButton("✏️ Изменить количество", callback_data="media_edit")],
+            [InlineKeyboardButton("📝 Добавить комментарий", callback_data="media_comment")],
+            [InlineKeyboardButton("❌ Отмена", callback_data="manage_cancel")],
+        ]
+    )
+
+
+def _media_confirmation_text(employee_name: str, device_name: str, quantity: int, action: str, comment: str) -> str:
+    sign = "+" if action == "add" else "-"
+    action_word = "добавление" if action == "add" else "списание"
+    comment_text = comment or "—"
+    return (
+        "Проверьте данные и подтвердите операцию:\n\n"
+        f"👤 Сотрудник: <b>{employee_name}</b>\n"
+        f"🔄 Медиаконвертор: {device_name}\n"
+        f"Действие: {action_word}\n"
+        f"Количество: {sign}{quantity} шт.\n"
+        f"📝 Комментарий: {comment_text}"
+    )
+
+
+async def show_media_confirmation(message, employee: dict, device_name: str, action: str, quantity: int, context: ContextTypes.DEFAULT_TYPE):
+    text = _media_confirmation_text(
+        employee.get("full_name", "—") if employee else "—",
+        device_name,
+        quantity,
+        action,
+        context.user_data.get("media_comment", ""),
+    )
+    await message.reply_text(
+        text,
+        reply_markup=_media_keyboard(),
+        parse_mode="HTML",
+    )
+    return CONFIRM_MEDIA_OPERATION

@@ -3,6 +3,7 @@
 """
 import os
 import logging
+import re
 from dotenv import load_dotenv
 
 # Загрузка переменных окружения
@@ -18,6 +19,31 @@ logging.basicConfig(
     ]
 )
 logger = logging.getLogger(__name__)
+
+
+class _TokenFilter(logging.Filter):
+    """Прячет токены Telegram Bot API в логах."""
+
+    _token_re = re.compile(r"(bot\\d+):[A-Za-z0-9_-]+")
+
+    def filter(self, record: logging.LogRecord) -> bool:  # pragma: no cover - утилитарный код
+        try:
+            message = record.getMessage()
+        except Exception:
+            return True
+        redacted = self._token_re.sub(r"\\1[REDACTED]", message)
+        if redacted != message:
+            record.msg = redacted
+            record.args = ()
+        return True
+
+
+# Маскируем токен и приглушаем HTTP-запросы httpx (в них попадал токен).
+_token_filter = _TokenFilter()
+root_logger = logging.getLogger()
+for handler in root_logger.handlers:
+    handler.addFilter(_token_filter)
+logging.getLogger("httpx").setLevel(logging.WARNING)
 
 # Константы состояний для ConversationHandler
 # Создание подключения
@@ -36,6 +62,7 @@ SELECT_EMPLOYEES = 11
 SELECT_MATERIAL_PAYER = 12
 SELECT_ROUTER_PAYER = 13
 CONFIRM = 14
+ENTER_COMMENT = 55
 
 # Управление сотрудниками
 MANAGE_ACTION = 15
@@ -80,6 +107,9 @@ SELECT_MEDIA_ACTION = 51
 ENTER_MEDIA_NAME = 52
 ENTER_MEDIA_QUANTITY = 53
 CONFIRM_MEDIA_OPERATION = 54
+ENTER_COMMENT = 55
+ENTER_OPERATION_COMMENT = 56
+ENTER_SNR_QUANTITY_CONNECTION = 57
 
 # Типы подключений
 CONNECTION_TYPES = {

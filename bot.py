@@ -61,7 +61,7 @@ from handlers.reports import (
 # Инициализация БД
 db = Database()
 connection_conv = build_connection_conversation(db)
-access_manager = AccessManager(db, ALLOWED_USER_IDS)
+access_manager = AccessManager(db, ALLOWED_USER_IDS, admin_ids=ADMIN_IDS)
 admin_manager = AdminManager(db, ADMIN_IDS)
 employee_flow = EmployeeFlow(db, access_manager, admin_manager)
 

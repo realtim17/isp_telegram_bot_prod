@@ -19,6 +19,7 @@ class RouterRepository(BaseRepository):
         router_name: str,
         quantity: int,
         created_by: Optional[int] = None,
+        comment: str = "",
         connection: Optional[sqlite3.Connection] = None,
     ) -> bool:
         """Добавить роутеры сотруднику"""
@@ -61,6 +62,7 @@ class RouterRepository(BaseRepository):
             if not material_repo.log_movement(
                 employee_id, 'add', 'router', router_name,
                 quantity, new_quantity, None, created_by,
+                comment=comment,
                 cursor=cursor
             ):
                 raise RuntimeError("Не удалось записать лог движения роутеров")
@@ -84,6 +86,7 @@ class RouterRepository(BaseRepository):
         quantity: int = 1,
         connection_id: Optional[int] = None,
         created_by: Optional[int] = None,
+        comment: str = "",
         connection: Optional[sqlite3.Connection] = None,
     ) -> bool:
         """Списать роутер у сотрудника"""
@@ -132,6 +135,7 @@ class RouterRepository(BaseRepository):
             if not material_repo.log_movement(
                 employee_id, 'deduct', 'router', router_name,
                 quantity, new_quantity, connection_id, created_by,
+                comment=comment,
                 cursor=cursor
             ):
                 raise RuntimeError("Не удалось записать лог движения роутеров")

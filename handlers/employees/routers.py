@@ -12,6 +12,7 @@ from config import (
     ENTER_ROUTER_NAME,
     ENTER_ROUTER_QUANTITY,
     CONFIRM_ROUTER_OPERATION,
+    ENTER_OPERATION_COMMENT,
 )
 from utils.keyboards import get_main_keyboard
 from utils.helpers import run_in_thread
@@ -209,25 +210,9 @@ async def enter_router_quantity(flow: "EmployeeFlow", update: Update, context: C
     router_name = context.user_data.get("router_name")
     action = context.user_data.get("router_action")
     employee = await run_in_thread(flow.db.get_employee_by_id, emp_id)
-    symbol = "+" if action == "add" else "-"
+    context.user_data.setdefault("router_comment", "")
 
-    keyboard = InlineKeyboardMarkup(
-        [
-            [InlineKeyboardButton("✅ Подтвердить", callback_data="router_confirm")],
-            [InlineKeyboardButton("✏️ Изменить", callback_data="router_edit")],
-            [InlineKeyboardButton("❌ Отмена", callback_data="router_cancel")],
-        ]
-    )
-
-    await update.message.reply_text(
-        f"👤 Сотрудник: <b>{employee['full_name']}</b>\n"
-        f"📡 Роутер: {router_name}\n"
-        f"Количество: {symbol}{quantity} шт.\n\n"
-        "Подтвердить операцию?",
-        parse_mode="HTML",
-        reply_markup=keyboard,
-    )
-    return CONFIRM_ROUTER_OPERATION
+    return await show_router_confirmation(update.message, employee, router_name, action, quantity, context)
 
 
 async def confirm_router_operation(
@@ -251,6 +236,14 @@ async def confirm_router_operation(
         )
         context.user_data.pop("router_quantity", None)
         return ENTER_ROUTER_QUANTITY
+    
+    if data == "router_comment":
+        context.user_data["comment_target"] = "router"
+        await query.edit_message_text(
+            "📝 Введите комментарий к операции с роутером:",
+            parse_mode="HTML",
+        )
+        return ENTER_OPERATION_COMMENT
 
     if data != "router_confirm":
         return CONFIRM_ROUTER_OPERATION
@@ -259,6 +252,7 @@ async def confirm_router_operation(
     router_name = context.user_data.get("router_name")
     quantity = context.user_data.get("router_quantity", 0)
     action = context.user_data.get("router_action")
+    comment = context.user_data.get("router_comment", "")
     employee = await run_in_thread(flow.db.get_employee_by_id, emp_id)
 
     if not employee:
@@ -271,7 +265,7 @@ async def confirm_router_operation(
 
     if action == "add":
         success = await run_in_thread(
-            flow.db.add_router_to_employee, emp_id, router_name, quantity, created_by
+            flow.db.add_router_to_employee, emp_id, router_name, quantity, created_by, comment
         )
         if success:
             new_quantity = await run_in_thread(flow.db.get_router_quantity, emp_id, router_name)
@@ -293,6 +287,7 @@ async def confirm_router_operation(
             quantity,
             None,
             created_by,
+            comment,
         )
         if success:
             new_quantity = await run_in_thread(flow.db.get_router_quantity, emp_id, router_name)
@@ -315,3 +310,42 @@ async def confirm_router_operation(
     return ConversationHandler.END
 
 
+def _router_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        [
+            [InlineKeyboardButton("✅ Подтвердить", callback_data="router_confirm")],
+            [InlineKeyboardButton("✏️ Изменить", callback_data="router_edit")],
+            [InlineKeyboardButton("📝 Добавить комментарий", callback_data="router_comment")],
+            [InlineKeyboardButton("❌ Отмена", callback_data="router_cancel")],
+        ]
+    )
+
+
+def _router_confirmation_text(employee_name: str, router_name: str, quantity: int, action: str, comment: str) -> str:
+    symbol = "+" if action == "add" else "-"
+    action_word = "добавление" if action == "add" else "списание"
+    comment_text = comment or "—"
+    return (
+        "Проверьте данные и подтвердите операцию:\n\n"
+        f"👤 Сотрудник: <b>{employee_name}</b>\n"
+        f"📡 Роутер: {router_name}\n"
+        f"Действие: {action_word}\n"
+        f"Количество: {symbol}{quantity} шт.\n"
+        f"📝 Комментарий: {comment_text}"
+    )
+
+
+async def show_router_confirmation(message, employee: dict, router_name: str, action: str, quantity: int, context: ContextTypes.DEFAULT_TYPE):
+    text = _router_confirmation_text(
+        employee.get("full_name", "—") if isinstance(employee, dict) else "—",
+        router_name,
+        quantity,
+        action,
+        context.user_data.get("router_comment", ""),
+    )
+    await message.reply_text(
+        text,
+        reply_markup=_router_keyboard(),
+        parse_mode="HTML",
+    )
+    return CONFIRM_ROUTER_OPERATION

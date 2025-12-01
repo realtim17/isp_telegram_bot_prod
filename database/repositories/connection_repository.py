@@ -22,8 +22,9 @@ class ConnectionRepository(BaseRepository):
             # Получаем основную информацию
             cursor.execute("""
                 SELECT id, connection_type, address, router_model, port, fiber_meters, 
-                       snr_box_model, twisted_pair_meters, created_at, created_by, router_quantity, 
-                       contract_signed, router_access, telegram_bot_connected
+                       snr_box_model, snr_box_quantity, comment, twisted_pair_meters, created_at, created_by, router_quantity, 
+                       contract_signed, router_access, telegram_bot_connected,
+                       onu_model, onu_quantity, media_converter_model, media_converter_quantity
                 FROM connections
                 WHERE id = ?
             """, (connection_id,))
@@ -93,6 +94,7 @@ class ConnectionRepository(BaseRepository):
                     c.address,
                     c.router_model,
                     c.snr_box_model,
+                    c.comment,
                     c.port,
                     c.fiber_meters,
                     c.twisted_pair_meters,
@@ -229,6 +231,7 @@ class ConnectionRepository(BaseRepository):
                     c.address,
                     c.router_model,
                     c.snr_box_model,
+                    c.comment,
                     c.port,
                     c.fiber_meters,
                     c.twisted_pair_meters,

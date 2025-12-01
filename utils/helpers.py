@@ -48,6 +48,8 @@ def _format_report_text(connection_id: int, data: Dict, employee_names: List[str
     # Получаем информацию о роутерах (если есть)
     router_model = data.get('router_model', '-')
     router_quantity = data.get('router_quantity', 1)
+    snr_model = data.get('snr_box_model', '-') or '-'
+    snr_quantity = data.get('snr_box_quantity', 0) or 0
     onu_model = data.get('onu_model', '-') or '-'
     onu_quantity = data.get('onu_quantity', 0) or 0
     media_model = data.get('media_converter_model', '-') or '-'
@@ -61,8 +63,12 @@ def _format_report_text(connection_id: int, data: Dict, employee_names: List[str
     if router_quantity > 1:
         router_info += f" ({router_quantity} шт.)"
     
-    snr_model = data.get('snr_box_model', '-') or '-'
-    snr_info = snr_model if snr_model and snr_model != '-' else "-"
+    if snr_model == '-' or not snr_model:
+        snr_info = "-"
+    else:
+        snr_info = snr_model
+        if snr_quantity > 0:
+            snr_info += f" ({snr_quantity} шт.)"
     
     if onu_model == '-' or not onu_model:
         onu_info = "-"
@@ -93,6 +99,7 @@ def _format_report_text(connection_id: int, data: Dict, employee_names: List[str
     # Получаем информацию о Телеграмм Боте
     telegram_bot_connected = data.get('telegram_bot_connected', False)
     telegram_bot_status = "✅ Подключен" if telegram_bot_connected else "-"
+    comment_text = data.get('comment') or "-"
     
     return f"""
 <b>📋 ОТЧЕТ О ПОДКЛЮЧЕНИИ #{connection_id}</b>
@@ -107,6 +114,8 @@ def _format_report_text(connection_id: int, data: Dict, employee_names: List[str
 <b> Договор:</b> {contract_status}
 <b> Телеграмм Бот:</b> {telegram_bot_status}
 <b> Порт:</b> {port_display}
+
+<b>📝 Комментарий:</b> {comment_text}
 
 <b>📏 Проложенный кабель:</b>
   • ВОЛС: {data['fiber_meters']} м

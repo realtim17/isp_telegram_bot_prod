@@ -39,6 +39,7 @@ from config import (
     ENTER_MEDIA_NAME,
     ENTER_MEDIA_QUANTITY,
     CONFIRM_MEDIA_OPERATION,
+    ENTER_OPERATION_COMMENT,
 )
 from database import Database
 
@@ -53,6 +54,7 @@ from . import (
     admin_control,
     onu,
     media_converters,
+    comments,
 )
 
 
@@ -186,6 +188,10 @@ class EmployeeFlow:
     # --- Общий список ---
     async def show_employees_list(self, update, context):
         return await listing.show_employees_list(self, update, context)
+    
+    # --- Комментарии к операциям ---
+    async def enter_operation_comment(self, update, context):
+        return await comments.enter_operation_comment(self, update, context)
 
     # --- Построение ConversationHandler ---
     def build_conversation(self, text_input_filter, fallbacks) -> ConversationHandler:
@@ -233,7 +239,7 @@ class EmployeeFlow:
                 CONFIRM_MATERIAL_OPERATION: [
                     CallbackQueryHandler(
                         self.confirm_material_operation,
-                        pattern="^(material_confirm|material_edit|material_cancel)",
+                        pattern="^(material_confirm|material_edit|material_cancel|material_comment)",
                     )
                 ],
                 SELECT_EMPLOYEE_FOR_ROUTER: [
@@ -259,7 +265,7 @@ class EmployeeFlow:
                 CONFIRM_ROUTER_OPERATION: [
                     CallbackQueryHandler(
                         self.confirm_router_operation,
-                        pattern="^(router_confirm|router_edit|router_cancel)",
+                        pattern="^(router_confirm|router_edit|router_cancel|router_comment)",
                     )
                 ],
                 SELECT_EMPLOYEE_FOR_SNR: [
@@ -286,7 +292,7 @@ class EmployeeFlow:
                 CONFIRM_SNR_OPERATION: [
                     CallbackQueryHandler(
                         self.confirm_snr_operation,
-                        pattern="^(snr_confirm|snr_edit|snr_cancel)"
+                        pattern="^(snr_confirm|snr_edit|snr_cancel|snr_comment)"
                     )
                 ],
                 MANAGE_ACCESS: [
@@ -338,7 +344,7 @@ class EmployeeFlow:
                 CONFIRM_ONU_OPERATION: [
                     CallbackQueryHandler(
                         self.confirm_onu_operation,
-                        pattern="^(onu_confirm|onu_edit|manage_cancel)"
+                        pattern="^(onu_confirm|onu_edit|manage_cancel|onu_comment)"
                     )
                 ],
                 SELECT_EMPLOYEE_FOR_MEDIA: [
@@ -364,8 +370,11 @@ class EmployeeFlow:
                 CONFIRM_MEDIA_OPERATION: [
                     CallbackQueryHandler(
                         self.confirm_media_operation,
-                        pattern="^(media_confirm|media_edit|manage_cancel)"
+                        pattern="^(media_confirm|media_edit|manage_cancel|media_comment)"
                     )
+                ],
+                ENTER_OPERATION_COMMENT: [
+                    MessageHandler(text_input_filter, self.enter_operation_comment)
                 ],
             },
             fallbacks=fallbacks,

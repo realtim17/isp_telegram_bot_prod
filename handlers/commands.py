@@ -7,6 +7,23 @@ from telegram.ext import ContextTypes, ConversationHandler
 from utils.keyboards import get_main_keyboard
 
 
+def clear_all_conversations(context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    Полностью очистить все данные бесед и состояний во всем боте.
+    Используем для /stop, чтобы гарантированно сбросить любые активные процессы.
+    """
+    try:
+        # Чистим только данные текущего чата/пользователя, не затрагивая остальных
+        context.user_data.clear()
+        context.chat_data.clear()
+        if hasattr(context, "application") and context.application:
+            if hasattr(context.application, "conversation_data"):
+                context.application.conversation_data.pop(context.chat.id, None)
+    except Exception:
+        # Предпочитаем не падать на вспомогательной очистке
+        context.user_data.clear()
+
+
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Обработка команды /start"""
     user = update.effective_user
@@ -95,9 +112,11 @@ async def cancel_and_start_new(update: Update, context: ContextTypes.DEFAULT_TYP
 
 async def stop_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Принудительная остановка любых активных действий"""
-    context.user_data.clear()
-    await update.message.reply_text(
-        "⏹️ Все активные действия остановлены.",
-        reply_markup=get_main_keyboard()
-    )
+    clear_all_conversations(context)
+    target = update.effective_message
+    if target:
+        await target.reply_text(
+            "⏹️ Все активные действия остановлены.",
+            reply_markup=get_main_keyboard()
+        )
     return ConversationHandler.END

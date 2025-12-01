@@ -64,7 +64,11 @@ class BaseRepository:
                     conn.commit()
                 return last_id
         except Exception as e:
-            logger.error(f"Ошибка выполнения запроса: {e}")
+            msg = str(e).lower()
+            if "database is locked" in msg or "database locked" in msg:
+                logger.error("SQLite locked: %s. Query: %s", e, query)
+            else:
+                logger.error(f"Ошибка выполнения запроса: {e}")
             if conn:
                 conn.rollback()
             return None
