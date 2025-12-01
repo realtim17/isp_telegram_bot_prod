@@ -158,19 +158,24 @@ def build_connection_conversation(db) -> ConversationHandler:
                 CallbackQueryHandler(select_snr_box_wrapper, pattern='^(snr_box_.*|snr_skip|cancel_connection)$')
             ],
             ENTER_SNR_QUANTITY_CONNECTION: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, enter_snr_quantity_wrapper)
+                MessageHandler(filters.TEXT & ~filters.COMMAND, enter_snr_quantity_wrapper),
+                CallbackQueryHandler(cancel_connection, pattern='^cancel_connection$')
             ],
             SELECT_ONU_ACTION: [
-                CallbackQueryHandler(select_onu_wrapper, pattern='^(conn_onu_.*|conn_onu_skip|cancel_connection)$')
+                CallbackQueryHandler(select_onu_wrapper, pattern='^(conn_onu_.*|conn_onu_skip)$'),
+                CallbackQueryHandler(cancel_connection, pattern='^cancel_connection$')
             ],
             ENTER_ONU_QUANTITY: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, enter_onu_quantity_wrapper)
+                MessageHandler(filters.TEXT & ~filters.COMMAND, enter_onu_quantity_wrapper),
+                CallbackQueryHandler(cancel_connection, pattern='^cancel_connection$')
             ],
             SELECT_MEDIA_ACTION: [
-                CallbackQueryHandler(select_media_wrapper, pattern='^(conn_media_.*|conn_media_skip|cancel_connection)$')
+                CallbackQueryHandler(select_media_wrapper, pattern='^(conn_media_.*|conn_media_skip)$'),
+                CallbackQueryHandler(cancel_connection, pattern='^cancel_connection$')
             ],
             ENTER_MEDIA_QUANTITY: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, enter_media_quantity_wrapper)
+                MessageHandler(filters.TEXT & ~filters.COMMAND, enter_media_quantity_wrapper),
+                CallbackQueryHandler(cancel_connection, pattern='^cancel_connection$')
             ],
             ENTER_COMMENT: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, enter_comment_wrapper)

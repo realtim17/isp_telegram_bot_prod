@@ -12,7 +12,7 @@ from config import (
     ENTER_COMMENT, ENTER_SNR_QUANTITY_CONNECTION, CONNECTION_TYPES
 )
 from utils.keyboards import get_main_keyboard
-from handlers.connection.constants import MAX_PHOTOS, PHOTO_REQUIREMENTS
+from handlers.connection.constants import MAX_PHOTOS, PHOTO_REQUIREMENTS, CANCEL_TEXT as LEGACY_CANCEL_TEXT
 from handlers.connection.cancellation import cancel_connection
 from handlers.connection.employees import start_employee_selection
 from utils.helpers import run_in_thread
@@ -23,6 +23,9 @@ from handlers.connection.ui import (
     SKIP_TEXT,
     CANCEL_TEXT
 )
+
+# unify cancel text: use button text for comparisons
+CANCEL_TEXT = CANCEL_TEXT or LEGACY_CANCEL_TEXT
 
 
 # Вспомогательные шаги для перестановки последовательности
