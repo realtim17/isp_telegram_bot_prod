@@ -1,8 +1,6 @@
 """
 Обработчики выбора исполнителей для подключения
 """
-from typing import Optional
-
 from telegram import Update, InlineKeyboardButton
 from telegram.ext import ContextTypes, ConversationHandler
 
@@ -15,8 +13,7 @@ from handlers.connection.ui import build_inline_keyboard
 async def start_employee_selection(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
-    db,
-    pre_text: Optional[str] = None
+    db
 ) -> int:
     """Показать шаг выбора исполнителей"""
     query = update.callback_query
@@ -50,15 +47,11 @@ async def start_employee_selection(
     keyboard.append([InlineKeyboardButton("✅ Готово", callback_data='employees_done')])
     reply_markup = build_inline_keyboard(keyboard)
     
-    message_parts = []
-    if pre_text:
-        message_parts.append(pre_text)
-    message_parts.append(
+    message_text = (
         "👥 <b>Шаг 16/16: Выбор исполнителей</b>\n\n"
         "Выберите сотрудников, которые участвовали в подключении:\n"
         "(можно выбрать нескольких)"
     )
-    message_text = "\n\n".join(message_parts)
     
     if query:
         await query.edit_message_text(

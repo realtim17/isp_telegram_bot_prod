@@ -17,28 +17,36 @@ from config import (
 from handlers.connection.steps import (
     new_connection_start,
     select_connection_type,
-    upload_photos,
-    ask_address,
     enter_address,
-    select_router,
-    enter_router_quantity_connection,
+    contract_signed,
+    telegram_bot_confirm,
+)
+
+from handlers.connection.cabling import (
     router_access_handler,
     enter_port,
     enter_fiber,
     enter_twisted,
-    contract_signed,
-    telegram_bot_confirm,
+)
+from handlers.connection.devices import (
+    select_router,
+    enter_router_quantity_connection,
     select_snr_box,
     enter_snr_quantity_connection,
     select_onu_connection,
     enter_onu_quantity_connection,
     select_media_connection,
     enter_media_quantity_connection,
+)
+from handlers.connection.comments import (
+    start_comment_step,
     enter_comment,
 )
 
+from handlers.connection.photos import upload_photos, ask_address
+
 # Импорт обработчиков выбора исполнителей
-from handlers.connection.employees import (
+from handlers.connection.executors import (
     select_employee_toggle
 )
 

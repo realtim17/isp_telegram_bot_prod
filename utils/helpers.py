@@ -90,7 +90,7 @@ def _format_report_text(connection_id: int, data: Dict, employee_names: List[str
     
     # Получаем информацию о договоре
     contract_signed = data.get('contract_signed', False)
-    contract_status = "✅ Подписан" if contract_signed else "❌ Не подписан"
+    contract_status = "✅ Подтверждено" if contract_signed else "⏭️ Пропущено"
     
     # Получаем информацию о доступе на роутер
     router_access = data.get('router_access', False)
