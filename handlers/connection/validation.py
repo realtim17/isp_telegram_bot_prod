@@ -19,6 +19,7 @@ def _set_responsible(context, payer_id: int) -> None:
     context.user_data['snr_box_payer_id'] = payer_id
     context.user_data['onu_payer_id'] = payer_id
     context.user_data['media_payer_id'] = payer_id
+    context.user_data['sfp_payer_id'] = payer_id
 
 
 async def check_materials_and_proceed(update: Update, context: ContextTypes.DEFAULT_TYPE, db) -> int:

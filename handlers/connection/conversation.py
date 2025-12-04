@@ -10,6 +10,7 @@ from config import (
     ENTER_TWISTED, CONTRACT_SIGNED, TELEGRAM_BOT_CONFIRM, SELECT_EMPLOYEES, 
     SELECT_MATERIAL_PAYER, SELECT_ROUTER_PAYER, SELECT_SNR_BOX, SELECT_SNR_PAYER, CONFIRM,
     SELECT_ONU_ACTION, ENTER_ONU_QUANTITY, SELECT_MEDIA_ACTION, ENTER_MEDIA_QUANTITY,
+    SELECT_SFP_ACTION, ENTER_SFP_QUANTITY,
     ENTER_COMMENT, ENTER_SNR_QUANTITY_CONNECTION
 )
 
@@ -37,6 +38,8 @@ from handlers.connection.devices import (
     enter_onu_quantity_connection,
     select_media_connection,
     enter_media_quantity_connection,
+    select_sfp_connection,
+    enter_sfp_quantity_connection,
 )
 from handlers.connection.comments import (
     start_comment_step,
@@ -98,6 +101,12 @@ def build_connection_conversation(db) -> ConversationHandler:
     
     async def enter_media_quantity_wrapper(update, context):
         return await enter_media_quantity_connection(update, context, db)
+
+    async def select_sfp_wrapper(update, context):
+        return await select_sfp_connection(update, context, db)
+
+    async def enter_sfp_quantity_wrapper(update, context):
+        return await enter_sfp_quantity_connection(update, context, db)
     
     async def enter_comment_wrapper(update, context):
         return await enter_comment(update, context, db)
@@ -183,6 +192,14 @@ def build_connection_conversation(db) -> ConversationHandler:
             ],
             ENTER_MEDIA_QUANTITY: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, enter_media_quantity_wrapper),
+                CallbackQueryHandler(cancel_connection, pattern='^cancel_connection$')
+            ],
+            SELECT_SFP_ACTION: [
+                CallbackQueryHandler(select_sfp_wrapper, pattern='^(conn_sfp_.*|conn_sfp_skip)$'),
+                CallbackQueryHandler(cancel_connection, pattern='^cancel_connection$')
+            ],
+            ENTER_SFP_QUANTITY: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, enter_sfp_quantity_wrapper),
                 CallbackQueryHandler(cancel_connection, pattern='^cancel_connection$')
             ],
             ENTER_COMMENT: [

@@ -52,10 +52,12 @@ async def show_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE, 
     snr_box_payer_id = material_payer_id
     onu_payer_id = material_payer_id
     media_payer_id = material_payer_id
+    sfp_payer_id = material_payer_id
     context.user_data['router_payer_id'] = router_payer_id
     context.user_data['snr_box_payer_id'] = snr_box_payer_id
     context.user_data['onu_payer_id'] = onu_payer_id
     context.user_data['media_payer_id'] = media_payer_id
+    context.user_data['sfp_payer_id'] = sfp_payer_id
     
     payer_info = ""
     if material_payer_id:
@@ -91,6 +93,7 @@ async def show_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE, 
 
     onu_payer_id = context.user_data.get('onu_payer_id')
     media_payer_id = context.user_data.get('media_payer_id')
+    sfp_payer_id = context.user_data.get('sfp_payer_id')
 
     if onu_payer_id:
         onu_payer = employee_map.get(onu_payer_id)
@@ -113,6 +116,17 @@ async def show_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE, 
             media_quantity = data.get('media_converter_quantity', 0) or 0
             quantity_text = f" ({int(media_quantity)} шт.)" if media_quantity else ""
             payer_info += f"\n🔄 <b>Медиаконверторы списываются с:</b> {media_payer['full_name']}{quantity_text}"
+
+    if sfp_payer_id:
+        sfp_payer = employee_map.get(sfp_payer_id)
+        if not sfp_payer:
+            sfp_payer = await run_in_thread(db.get_employee_by_id, sfp_payer_id)
+            if sfp_payer:
+                employee_map[sfp_payer_id] = sfp_payer
+        if sfp_payer:
+            sfp_quantity = data.get('sfp_module_quantity', 0) or 0
+            quantity_text = f" ({int(sfp_quantity)} шт.)" if sfp_quantity else ""
+            payer_info += f"\n🧿 <b>SFP модули списываются с:</b> {sfp_payer['full_name']}{quantity_text}"
     
     # Формируем отображение роутера
     router_model = data.get('router_model', '-')
@@ -123,6 +137,8 @@ async def show_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE, 
     onu_quantity = data.get('onu_quantity', 0) or 0
     media_model = data.get('media_converter_model', '-') or '-'
     media_quantity = data.get('media_converter_quantity', 0) or 0
+    sfp_model = data.get('sfp_module_model', '-') or '-'
+    sfp_quantity = data.get('sfp_module_quantity', 0) or 0
     
     if router_model == '-' or not router_model:
         router_display = "-"
@@ -226,12 +242,15 @@ async def confirm_connection(update: Update, context: ContextTypes.DEFAULT_TYPE,
         snr_box_payer_id = context.user_data.get('snr_box_payer_id')
         onu_payer_id = context.user_data.get('onu_payer_id')
         media_payer_id = context.user_data.get('media_payer_id')
+        sfp_payer_id = context.user_data.get('sfp_payer_id')
         user_id = update.effective_user.id
         
         onu_model = data.get('onu_model', '-')
         onu_quantity = data.get('onu_quantity', 0) or 0
         media_model = data.get('media_converter_model', '-')
         media_quantity = data.get('media_converter_quantity', 0) or 0
+        sfp_model = data.get('sfp_module_model', '-')
+        sfp_quantity = data.get('sfp_module_quantity', 0) or 0
         
         router_quantity = data.get('router_quantity', 1)
         contract_signed = data.get('contract_signed', False)
@@ -267,6 +286,9 @@ async def confirm_connection(update: Update, context: ContextTypes.DEFAULT_TYPE,
                 media_converter_model=media_model,
                 media_converter_quantity=media_quantity,
                 media_payer_id=media_payer_id,
+                sfp_module_model=sfp_model,
+                sfp_module_quantity=sfp_quantity,
+                sfp_payer_id=sfp_payer_id,
                 comment=data.get('comment', ''),
             )
         except Exception as exc:

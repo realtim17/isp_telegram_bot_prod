@@ -24,7 +24,8 @@ class ConnectionRepository(BaseRepository):
                 SELECT id, connection_type, address, router_model, port, fiber_meters, 
                        snr_box_model, snr_box_quantity, comment, twisted_pair_meters, created_at, created_by, router_quantity, 
                        contract_signed, router_access, telegram_bot_connected,
-                       onu_model, onu_quantity, media_converter_model, media_converter_quantity
+                       onu_model, onu_quantity, media_converter_model, media_converter_quantity,
+                       sfp_module_model, sfp_module_quantity
                 FROM connections
                 WHERE id = ?
             """, (connection_id,))
@@ -94,10 +95,17 @@ class ConnectionRepository(BaseRepository):
                     c.address,
                     c.router_model,
                     c.snr_box_model,
+                    c.snr_box_quantity,
                     c.comment,
                     c.port,
                     c.fiber_meters,
                     c.twisted_pair_meters,
+                    c.onu_model,
+                    c.onu_quantity,
+                    c.media_converter_model,
+                    c.media_converter_quantity,
+                    c.sfp_module_model,
+                    c.sfp_module_quantity,
                     c.created_at,
                     COUNT(DISTINCT ce_all.employee_id) as employee_count
                 FROM connections c
@@ -137,7 +145,7 @@ class ConnectionRepository(BaseRepository):
                         SELECT connection_id, item_type, item_name, SUM(quantity) as qty
                         FROM material_movement_log
                         WHERE connection_id IN ({placeholders})
-                          AND item_type IN ('onu', 'media_converter', 'snr_box')
+                          AND item_type IN ('onu', 'media_converter', 'snr_box', 'sfp_module')
                           AND operation_type = 'deduct'
                         GROUP BY connection_id, item_type, item_name
                     """,
@@ -177,6 +185,7 @@ class ConnectionRepository(BaseRepository):
                 conn_dict['snr_spent'] = _format_items(mov.get('snr_box', {})) if mov.get('snr_box') else (conn_dict.get('snr_box_model') or "-")
                 conn_dict['onu_spent'] = _format_items(mov.get('onu', {}))
                 conn_dict['media_spent'] = _format_items(mov.get('media_converter', {}))
+                conn_dict['sfp_spent'] = _format_items(mov.get('sfp_module', {}))
                 
                 connections.append(conn_dict)
                 total_fiber_share += conn_dict['employee_fiber_meters']
@@ -231,10 +240,17 @@ class ConnectionRepository(BaseRepository):
                     c.address,
                     c.router_model,
                     c.snr_box_model,
+                    c.snr_box_quantity,
                     c.comment,
                     c.port,
                     c.fiber_meters,
                     c.twisted_pair_meters,
+                    c.onu_model,
+                    c.onu_quantity,
+                    c.media_converter_model,
+                    c.media_converter_quantity,
+                    c.sfp_module_model,
+                    c.sfp_module_quantity,
                     c.created_at,
                     COUNT(DISTINCT ce.employee_id) as employee_count
                 FROM connections c
@@ -272,7 +288,7 @@ class ConnectionRepository(BaseRepository):
                         SELECT connection_id, item_type, item_name, SUM(quantity) as qty
                         FROM material_movement_log
                         WHERE connection_id IN ({placeholders})
-                          AND item_type IN ('onu', 'media_converter', 'snr_box')
+                          AND item_type IN ('onu', 'media_converter', 'snr_box', 'sfp_module')
                           AND operation_type = 'deduct'
                         GROUP BY connection_id, item_type, item_name
                     """,
@@ -312,6 +328,7 @@ class ConnectionRepository(BaseRepository):
                 conn_dict["snr_spent"] = _format_items(mov.get("snr_box", {})) if mov.get("snr_box") else (conn_dict.get("snr_box_model") or "-")
                 conn_dict["onu_spent"] = _format_items(mov.get("onu", {}))
                 conn_dict["media_spent"] = _format_items(mov.get("media_converter", {}))
+                conn_dict["sfp_spent"] = _format_items(mov.get("sfp_module", {}))
 
                 connections.append(conn_dict)
                 total_fiber_share += conn_dict["employee_fiber_meters"]

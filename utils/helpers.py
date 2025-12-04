@@ -54,6 +54,8 @@ def _format_report_text(connection_id: int, data: Dict, employee_names: List[str
     onu_quantity = data.get('onu_quantity', 0) or 0
     media_model = data.get('media_converter_model', '-') or '-'
     media_quantity = data.get('media_converter_quantity', 0) or 0
+    sfp_model = data.get('sfp_module_model', '-') or '-'
+    sfp_quantity = data.get('sfp_module_quantity', 0) or 0
     
     # Если роутер пропущен или "-", отображаем "-"
     if router_model == '-' or not router_model:
@@ -83,6 +85,13 @@ def _format_report_text(connection_id: int, data: Dict, employee_names: List[str
         media_info = media_model
         if media_quantity > 0:
             media_info += f" ({media_quantity} шт.)"
+
+    if sfp_model == '-' or not sfp_model:
+        sfp_info = "-"
+    else:
+        sfp_info = sfp_model
+        if sfp_quantity > 0:
+            sfp_info += f" ({sfp_quantity} шт.)"
     
     # Получаем информацию о порте
     port = data.get('port', '-')
@@ -110,6 +119,7 @@ def _format_report_text(connection_id: int, data: Dict, employee_names: List[str
 <b> SNR бокс:</b> {snr_info}
 <b> ONU абон.терминал:</b> {onu_info}
 <b> Медиаконвертор:</b> {media_info}
+<b> SFP модуль:</b> {sfp_info}
 <b> Доступ на роутер:</b> {router_access_status}
 <b> Договор:</b> {contract_status}
 <b> Телеграмм Бот:</b> {telegram_bot_status}

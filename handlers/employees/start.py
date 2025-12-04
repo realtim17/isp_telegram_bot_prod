@@ -16,6 +16,7 @@ from config import (
     SELECT_EMPLOYEE_FOR_SNR,
     SELECT_EMPLOYEE_FOR_ONU,
     SELECT_EMPLOYEE_FOR_MEDIA,
+    SELECT_EMPLOYEE_FOR_SFP,
     logger,
 )
 from utils.keyboards import get_main_keyboard
@@ -83,6 +84,7 @@ async def manage_resources_start(flow: "EmployeeFlow", update: Update, context: 
         [InlineKeyboardButton("🧰 SNR Оптические боксы", callback_data="manage_snr")],
         [InlineKeyboardButton("🔌 ONU абон.терминалы", callback_data="manage_onu")],
         [InlineKeyboardButton("🔄 Медиаконверторы", callback_data="manage_media")],
+        [InlineKeyboardButton("🧿 SFP модули", callback_data="manage_sfp")],
         [InlineKeyboardButton("❌ Отмена", callback_data="manage_cancel")],
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -271,6 +273,34 @@ async def manage_action(flow: "EmployeeFlow", update: Update, context: ContextTy
         )
         return SELECT_EMPLOYEE_FOR_MEDIA
 
+    if data == "manage_sfp":
+        employees = await run_in_thread(flow.db.get_all_employees)
+        if not employees:
+            await query.edit_message_text("⚠️ В системе нет сотрудников.")
+            await query.message.reply_text("Выберите действие:", reply_markup=get_main_keyboard())
+            return ConversationHandler.END
+
+        keyboard = []
+        for emp in employees:
+            modules = await run_in_thread(flow.db.get_employee_sfp_modules, emp["id"]) or []
+            total = sum(mod["quantity"] for mod in modules)
+            keyboard.append(
+                [
+                    InlineKeyboardButton(
+                        f"🧿 {emp['full_name']} (SFP: {total} шт.)",
+                        callback_data=f"sfp_emp_{emp['id']}"
+                    )
+                ]
+            )
+        keyboard.append([InlineKeyboardButton("◀️ Назад", callback_data="back_to_manage")])
+
+        await query.edit_message_text(
+            "🧿 <b>SFP модули</b>\n\nВыберите сотрудника:",
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode="HTML",
+        )
+        return SELECT_EMPLOYEE_FOR_SFP
+
     if data == "manage_access":
         if not flow.access_manager:
             await query.answer("Функция недоступна", show_alert=True)
@@ -308,4 +338,3 @@ async def return_to_manage_menu(flow: "EmployeeFlow", update: Update, context: C
     if mode == ENTRY_MODE_RESOURCES:
         return await manage_resources_start(flow, update, context)
     return await manage_employees_start(flow, update, context)
-

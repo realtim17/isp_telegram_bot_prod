@@ -102,7 +102,8 @@ async def select_media_action(flow: "EmployeeFlow", update: Update, context: Con
 
     if action == "add":
         keyboard = [
-            [InlineKeyboardButton("🔄 Медик SNR 10/100/1000 Base-T", callback_data="media_model_Медик SNR 10/100/1000 Base-T")],
+            [InlineKeyboardButton("🔄 Медик 100 Base", callback_data="media_model_Медик 100 Base")],
+            [InlineKeyboardButton("🔄 Медик 1000 Base", callback_data="media_model_Медик 1000 Base")],
             [InlineKeyboardButton("✏️ Ввести вручную", callback_data="media_model_manual")],
             [InlineKeyboardButton("❌ Отмена", callback_data="manage_cancel")],
         ]

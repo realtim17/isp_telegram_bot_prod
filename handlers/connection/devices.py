@@ -1,4 +1,4 @@
-"""Шаги выбора оборудования (роутеры, ONU, медиаконверторы)."""
+"""Шаги выбора оборудования (роутеры, ONU, медиаконверторы, SFP)."""
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardRemove
 from telegram.ext import ContextTypes, ConversationHandler
 
@@ -12,6 +12,8 @@ from config import (
     ENTER_ONU_QUANTITY,
     SELECT_MEDIA_ACTION,
     ENTER_MEDIA_QUANTITY,
+    SELECT_SFP_ACTION,
+    ENTER_SFP_QUANTITY,
 )
 from handlers.connection.constants import CANCEL_TEXT as LEGACY_CANCEL_TEXT
 from handlers.connection.ui import (
@@ -34,7 +36,7 @@ async def start_router_step(
     db,
     address: str
 ) -> int:
-    """Показать пользователю шаг выбора роутера (Шаг 4/16)."""
+    """Показать пользователю шаг выбора роутера (Шаг 4/17)."""
     router_names = await run_in_thread(db.get_all_router_names) or []
 
     keyboard = [
@@ -46,12 +48,12 @@ async def start_router_step(
 
     if router_names:
         message_text = (
-            "🌐 <b>Шаг 4/16: Модель роутера</b>\n\n"
+            "🌐 <b>Шаг 4/17: Модель роутера</b>\n\n"
             "Выберите роутер из списка или пропустите:"
         )
     else:
         message_text = (
-            "🌐 <b>Шаг 4/16: Модель роутера</b>\n\n"
+            "🌐 <b>Шаг 4/17: Модель роутера</b>\n\n"
             "⚠️ В системе нет зарегистрированных роутеров.\n"
             "Вы можете пропустить этот шаг:"
         )
@@ -93,11 +95,11 @@ async def select_router(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         ])
 
         await query.edit_message_text(
-            "🌐 <b>Шаг 4/16: Модель роутера</b>\n\n⏭️ Пропущено.",
+            "🌐 <b>Шаг 4/17: Модель роутера</b>\n\n⏭️ Пропущено.",
             parse_mode='HTML'
         )
         await query.message.reply_text(
-            "🔐 <b>Шаг 6/16: Доступ на роутер</b>\n\n"
+            "🔐 <b>Шаг 6/17: Доступ на роутер</b>\n\n"
             "Подтвердите, что доступ на роутер открыт:",
             reply_markup=reply_markup,
             parse_mode='HTML'
@@ -108,12 +110,12 @@ async def select_router(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     context.user_data['connection_data']['router_model'] = router_name
 
     await query.edit_message_text(
-        "🌐 <b>Шаг 4/16: Модель роутера</b>\n\n"
+        "🌐 <b>Шаг 4/17: Модель роутера</b>\n\n"
         f"✅ Выбрано: <b>{router_name}</b>",
         parse_mode='HTML'
     )
     await query.message.reply_text(
-        "📦 <b>Шаг 5/16: Количество роутеров</b>\n\n"
+        "📦 <b>Шаг 5/17: Количество роутеров</b>\n\n"
         "Введите количество роутеров (по умолчанию: 1):",
         reply_markup=cancel_reply_keyboard(),
         parse_mode='HTML'
@@ -158,12 +160,12 @@ async def enter_router_quantity_connection(update: Update, context: ContextTypes
         reply_markup=ReplyKeyboardRemove()
     )
     await update.message.reply_text(
-        "📦 <b>Шаг 5/16: Количество роутеров</b>\n"
+        "📦 <b>Шаг 5/17: Количество роутеров</b>\n"
         f"✅ Количество: {router_quantity}",
         parse_mode='HTML'
     )
     await update.message.reply_text(
-        "🔐 <b>Шаг 6/16: Доступ на роутер</b>\n\n"
+        "🔐 <b>Шаг 6/17: Доступ на роутер</b>\n\n"
         "Подтвердите, что доступ на роутер открыт:",
         reply_markup=reply_markup,
         parse_mode='HTML'
@@ -183,7 +185,7 @@ async def select_snr_box(update: Update, context: ContextTypes.DEFAULT_TYPE, db)
         context.user_data["connection_data"]["snr_box_model"] = "-"
         context.user_data["connection_data"]["snr_box_quantity"] = 0
         await query.edit_message_text(
-            "🧰 <b>Шаг 10/16: SNR Оптический бокс</b>\n\n⏭️ Пропущено.",
+            "🧰 <b>Шаг 10/17: SNR Оптический бокс</b>\n\n⏭️ Пропущено.",
             parse_mode="HTML"
         )
         return await start_onu_step(update, context, db)
@@ -191,7 +193,7 @@ async def select_snr_box(update: Update, context: ContextTypes.DEFAULT_TYPE, db)
     box_name = query.data.replace("snr_box_", "", 1)
     context.user_data["connection_data"]["snr_box_model"] = box_name
     await query.edit_message_text(
-        "🧰 <b>Шаг 10/16: SNR Оптический бокс</b>\n\n"
+        "🧰 <b>Шаг 10/17: SNR Оптический бокс</b>\n\n"
         f"Выбрано: <b>{box_name}</b>\n"
         "🔢 Укажите количество (шт.):",
         parse_mode="HTML",
@@ -218,7 +220,7 @@ async def enter_snr_quantity_connection(update: Update, context: ContextTypes.DE
         reply_markup=ReplyKeyboardRemove()
     )
     await update.message.reply_text(
-        "🧰 <b>Шаг 10/16: SNR Оптический бокс</b>\n"
+        "🧰 <b>Шаг 10/17: SNR Оптический бокс</b>\n"
         f"✅ Модель: <b>{snr_model}</b>\n"
         f"✅ Количество: {quantity} шт.",
         parse_mode="HTML"
@@ -240,7 +242,7 @@ async def start_onu_step(update: Update, context: ContextTypes.DEFAULT_TYPE, db)
         if chat_id:
             await context.bot.send_message(
                 chat_id=chat_id,
-                text="🔌 <b>Шаг 11/16: ONU Абонентский терминал</b>\n\n⏭️ Пропущено.",
+                text="🔌 <b>Шаг 11/17: ONU Абонентский терминал</b>\n\n⏭️ Пропущено.",
                 parse_mode="HTML"
             )
         return await start_media_step(update, context, db)
@@ -253,7 +255,7 @@ async def start_onu_step(update: Update, context: ContextTypes.DEFAULT_TYPE, db)
     keyboard.append([InlineKeyboardButton("❌ Отмена", callback_data="cancel_connection")])
 
     text = (
-        "🔌 <b>Шаг 11/16: ONU Абонентский терминал</b>\n\n"
+        "🔌 <b>Шаг 11/17: ONU Абонентский терминал</b>\n\n"
         "Выберите модель или пропустите шаг:"
     )
     markup = InlineKeyboardMarkup(keyboard)
@@ -276,7 +278,7 @@ async def select_onu_connection(update: Update, context: ContextTypes.DEFAULT_TY
         context.user_data["connection_data"]["onu_model"] = "-"
         context.user_data["connection_data"]["onu_quantity"] = 0
         await query.edit_message_text(
-            "🔌 <b>Шаг 11/16: ONU Абонентский терминал</b>\n\n⏭️ Пропущено.",
+            "🔌 <b>Шаг 11/17: ONU Абонентский терминал</b>\n\n⏭️ Пропущено.",
             parse_mode="HTML"
         )
         return await start_media_step(update, context, db)
@@ -288,7 +290,7 @@ async def select_onu_connection(update: Update, context: ContextTypes.DEFAULT_TY
         model = query.data.replace("conn_onu_", "", 1)
         context.user_data["connection_data"]["onu_model"] = model
         text = (
-            "🔌 <b>Шаг 11/16: ONU Абонентский терминал</b>\n\n"
+            "🔌 <b>Шаг 11/17: ONU Абонентский терминал</b>\n\n"
             f"Выбрано: <b>{model}</b>\n"
             "🔢 Укажите количество (шт.):"
         )
@@ -329,7 +331,7 @@ async def enter_onu_quantity_connection(update: Update, context: ContextTypes.DE
         reply_markup=ReplyKeyboardRemove()
     )
     await update.message.reply_text(
-        "🔌 <b>Шаг 11/16: ONU Абонентский терминал</b>\n"
+        "🔌 <b>Шаг 11/17: ONU Абонентский терминал</b>\n"
         f"✅ Модель: <b>{onu_model}</b>\n"
         f"✅ Количество: {quantity} шт.",
         parse_mode="HTML"
@@ -347,15 +349,14 @@ async def start_media_step(update: Update, context: ContextTypes.DEFAULT_TYPE, d
     if not media_names:
         context.user_data["connection_data"]["media_converter_model"] = "-"
         context.user_data["connection_data"]["media_converter_quantity"] = 0
-        from handlers.connection.steps import start_contract_step
         chat_id = update.effective_chat.id if update.effective_chat else None
         if chat_id:
             await context.bot.send_message(
                 chat_id=chat_id,
-                text="🔄 <b>Шаг 12/16: Медиаконверторы</b>\n\n⏭️ Пропущено.",
+                text="🔄 <b>Шаг 12/17: Медиаконверторы</b>\n\n⏭️ Пропущено.",
                 parse_mode="HTML"
             )
-        return await start_contract_step(update, context)
+        return await start_sfp_step(update, context, db)
 
     keyboard = [
         [InlineKeyboardButton(f"🔄 {name}", callback_data=f"conn_media_{name}")]
@@ -365,7 +366,7 @@ async def start_media_step(update: Update, context: ContextTypes.DEFAULT_TYPE, d
     keyboard.append([InlineKeyboardButton("❌ Отмена", callback_data="cancel_connection")])
 
     text = (
-        "🔄 <b>Шаг 12/16: Медиаконверторы</b>\n\n"
+        "🔄 <b>Шаг 12/17: Медиаконверторы</b>\n\n"
         "Выберите модель или пропустите шаг:"
     )
     markup = InlineKeyboardMarkup(keyboard)
@@ -387,12 +388,11 @@ async def select_media_connection(update: Update, context: ContextTypes.DEFAULT_
     if query.data == "conn_media_skip":
         context.user_data["connection_data"]["media_converter_model"] = "-"
         context.user_data["connection_data"]["media_converter_quantity"] = 0
-        from handlers.connection.steps import start_contract_step
         await query.edit_message_text(
-            "🔄 <b>Шаг 12/16: Медиаконверторы</b>\n\n⏭️ Пропущено.",
+            "🔄 <b>Шаг 12/17: Медиаконверторы</b>\n\n⏭️ Пропущено.",
             parse_mode="HTML"
         )
-        return await start_contract_step(update, context)
+        return await start_sfp_step(update, context, db)
 
     if query.data == "cancel_connection":
         return await cancel_connection(update, context)
@@ -401,7 +401,7 @@ async def select_media_connection(update: Update, context: ContextTypes.DEFAULT_
         model = query.data.replace("conn_media_", "", 1)
         context.user_data["connection_data"]["media_converter_model"] = model
         text = (
-            "🔄 <b>Шаг 12/16: Медиаконверторы</b>\n\n"
+            "🔄 <b>Шаг 12/17: Медиаконверторы</b>\n\n"
             f"Выбрано: <b>{model}</b>\n"
             "🔢 Укажите количество (шт.):"
         )
@@ -442,9 +442,119 @@ async def enter_media_quantity_connection(update: Update, context: ContextTypes.
         reply_markup=ReplyKeyboardRemove()
     )
     await update.message.reply_text(
-        "🔄 <b>Шаг 12/16: Медиаконверторы</b>\n"
+        "🔄 <b>Шаг 12/17: Медиаконверторы</b>\n"
         f"✅ Модель: <b>{media_model}</b>\n"
         f"✅ Количество: {quantity} шт.",
+        parse_mode="HTML"
+    )
+
+    return await start_sfp_step(update, context, db)
+
+
+async def start_sfp_step(update: Update, context: ContextTypes.DEFAULT_TYPE, db) -> int:
+    module_names = await run_in_thread(db.get_all_sfp_module_names) or []
+    context.user_data.setdefault("connection_data", {})
+    context.user_data["connection_data"].setdefault("sfp_module_model", "-")
+    context.user_data["connection_data"].setdefault("sfp_module_quantity", 0)
+
+    if not module_names:
+        context.user_data["connection_data"]["sfp_module_model"] = "-"
+        context.user_data["connection_data"]["sfp_module_quantity"] = 0
+        from handlers.connection.steps import start_contract_step
+        chat_id = update.effective_chat.id if update.effective_chat else None
+        if chat_id:
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text="🧿 <b>Шаг 13/17: SFP модули</b>\n\n⏭️ Пропущено.",
+                parse_mode="HTML"
+            )
+        return await start_contract_step(update, context)
+
+    keyboard = [
+        [InlineKeyboardButton(f"🧿 {name}", callback_data=f"conn_sfp_{name}")]
+        for name in module_names
+    ]
+    keyboard.append([InlineKeyboardButton("⏭️ Пропустить", callback_data="conn_sfp_skip")])
+    keyboard.append([InlineKeyboardButton("❌ Отмена", callback_data="cancel_connection")])
+
+    text = (
+        "🧿 <b>Шаг 13/17: SFP модули</b>\n\n"
+        "Выберите модель или пропустите шаг:"
+    )
+    markup = InlineKeyboardMarkup(keyboard)
+    chat_id = update.effective_chat.id if update.effective_chat else None
+    if chat_id:
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=text,
+            reply_markup=markup,
+            parse_mode="HTML"
+        )
+    return SELECT_SFP_ACTION
+
+
+async def select_sfp_connection(update: Update, context: ContextTypes.DEFAULT_TYPE, db) -> int:
+    query = update.callback_query
+    await query.answer()
+
+    if query.data == "conn_sfp_skip":
+        context.user_data["connection_data"]["sfp_module_model"] = "-"
+        context.user_data["connection_data"]["sfp_module_quantity"] = 0
+        from handlers.connection.steps import start_contract_step
+        await query.edit_message_text(
+            "🧿 <b>Шаг 13/17: SFP модули</b>\n\n⏭️ Пропущено.",
+            parse_mode="HTML"
+        )
+        return await start_contract_step(update, context)
+
+    if query.data == "cancel_connection":
+        return await cancel_connection(update, context)
+
+    if query.data.startswith("conn_sfp_"):
+        model = query.data.replace("conn_sfp_", "", 1)
+        context.user_data["connection_data"]["sfp_module_model"] = model
+        text = (
+            "🧿 <b>Шаг 13/17: SFP модули</b>\n\n"
+            f"Выбрано: <b>{model}</b>\n"
+            "🔢 Укажите количество (шт.):"
+        )
+        await query.edit_message_text(text, parse_mode="HTML")
+        await query.message.reply_text(
+            "Для отмены нажмите кнопку ниже:",
+            reply_markup=cancel_reply_keyboard()
+        )
+        return ENTER_SFP_QUANTITY
+
+    return SELECT_SFP_ACTION
+
+
+async def enter_sfp_quantity_connection(update: Update, context: ContextTypes.DEFAULT_TYPE, db) -> int:
+    text = (update.message.text or "").strip()
+    if text in CANCEL_TEXT_VARIANTS:
+        context.user_data.clear()
+        await update.message.reply_text(
+            "❌ <b>Создание подключения отменено</b>\n\nВсе введённые данные удалены.",
+            reply_markup=get_main_keyboard(),
+            parse_mode="HTML"
+        )
+        return ConversationHandler.END
+
+    try:
+        quantity = int(text)
+        if quantity <= 0:
+            raise ValueError
+    except ValueError:
+        await update.message.reply_text("Введите целое число больше нуля.")
+        return ENTER_SFP_QUANTITY
+
+    context.user_data["connection_data"]["sfp_module_quantity"] = quantity
+    module_model = context.user_data["connection_data"].get("sfp_module_model", "-")
+
+    await update.message.reply_text(
+        "🧿 <b>Шаг 13/17: SFP модули</b>\n"
+        f"✅ Модель: <b>{module_model}</b>\n"
+        f"✅ Количество: {quantity} шт.",
+        reply_markup=ReplyKeyboardRemove(),
         parse_mode="HTML"
     )
 

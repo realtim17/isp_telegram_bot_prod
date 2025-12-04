@@ -16,7 +16,7 @@ from config import (
 from utils.helpers import run_in_thread
 from utils.keyboards import get_main_keyboard
 
-from . import materials, routers, snr_boxes, onu, media_converters
+from . import materials, routers, snr_boxes, onu, media_converters, sfp_modules
 
 
 async def enter_operation_comment(flow: "EmployeeFlow", update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -75,6 +75,15 @@ async def enter_operation_comment(flow: "EmployeeFlow", update: Update, context:
         action = context.user_data.get("media_action", "add")
         quantity = context.user_data.get("media_quantity", 0)
         return await media_converters.show_media_confirmation(update.message, employee, device_name, action, quantity, context)
+
+    if target == "sfp":
+        context.user_data["sfp_comment"] = comment
+        emp_id = context.user_data.get("selected_employee_id")
+        employee = await run_in_thread(flow.db.get_employee_by_id, emp_id) if emp_id else {}
+        module_name = context.user_data.get("sfp_name", "-")
+        action = context.user_data.get("sfp_action", "add")
+        quantity = context.user_data.get("sfp_quantity", 0)
+        return await sfp_modules.show_sfp_confirmation(update.message, employee, module_name, action, quantity, context)
 
     await update.message.reply_text("⚠️ Неизвестный тип операции для комментария.", reply_markup=get_main_keyboard())
     return ConversationHandler.END

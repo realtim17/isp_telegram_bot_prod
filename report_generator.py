@@ -62,23 +62,23 @@ class ReportGenerator:
         total_font = Font(name='Arial', size=11, bold=True)
         
         # Заголовок отчета
-        ws.merge_cells('A1:O1')
+        ws.merge_cells('A1:P1')
         ws['A1'] = f"Сводный отчет по монтажнику"
         ws['A1'].font = title_font
         ws['A1'].alignment = title_alignment
         
         # Информация о сотруднике и периоде
-        ws.merge_cells('A2:O2')
+        ws.merge_cells('A2:P2')
         ws['A2'] = f"Исполнитель: {employee_name}"
         ws['A2'].font = Font(name='Arial', size=11, bold=True)
         ws['A2'].alignment = cell_alignment
         
-        ws.merge_cells('A3:O3')
+        ws.merge_cells('A3:P3')
         ws['A3'] = f"Период: {period_name}"
         ws['A3'].font = Font(name='Arial', size=11)
         ws['A3'].alignment = cell_alignment
         
-        ws.merge_cells('A4:O4')
+        ws.merge_cells('A4:P4')
         ws['A4'] = f"Дата формирования: {datetime.now().strftime('%d.%m.%Y %H:%M')}"
         ws['A4'].font = Font(name='Arial', size=10)
         ws['A4'].alignment = cell_alignment
@@ -98,6 +98,7 @@ class ReportGenerator:
             'SNR бокс',
             'ONU',
             'Медиаконверторы',
+            'SFP модули',
             'Связь с подключением',
             'Комментарий',
         ]
@@ -125,8 +126,9 @@ class ReportGenerator:
         ws.column_dimensions['K'].width = 18  # SNR бокс
         ws.column_dimensions['L'].width = 18  # ONU
         ws.column_dimensions['M'].width = 22  # МК
-        ws.column_dimensions['N'].width = 20  # Связь с подключением
-        ws.column_dimensions['O'].width = 30  # Комментарий
+        ws.column_dimensions['N'].width = 18  # SFP модули
+        ws.column_dimensions['O'].width = 20  # Связь с подключением
+        ws.column_dimensions['P'].width = 30  # Комментарий
         
         # Данные подключений
         current_row = 7
@@ -156,6 +158,24 @@ class ReportGenerator:
                 else:
                     snr_display = "-"
 
+            sfp_display = conn.get('sfp_spent')
+            if not sfp_display or sfp_display == '-':
+                sfp_model = conn.get('sfp_module_model', '-')
+                sfp_qty = conn.get('sfp_module_quantity', 0) or 0
+                if sfp_model and sfp_model != '-':
+                    sfp_display = f"{sfp_model} ({int(sfp_qty)} шт.)" if sfp_qty else sfp_model
+                else:
+                    sfp_display = "-"
+
+            sfp_display = conn.get('sfp_spent')
+            if not sfp_display or sfp_display == '-':
+                sfp_model = conn.get('sfp_module_model', '-')
+                sfp_qty = conn.get('sfp_module_quantity', 0) or 0
+                if sfp_model and sfp_model != '-':
+                    sfp_display = f"{sfp_model} ({int(sfp_qty)} шт.)" if sfp_qty else sfp_model
+                else:
+                    sfp_display = "-"
+
             row_data = [
                 idx,  # Номер по порядку
                 date_str,
@@ -170,6 +190,7 @@ class ReportGenerator:
                 snr_display,
                 conn.get('onu_spent', '-'),
                 conn.get('media_spent', '-'),
+                sfp_display,
                 connection_link,
                 conn.get('comment') or "-",
             ]
@@ -310,17 +331,17 @@ class ReportGenerator:
         total_fill = PatternFill(start_color="E2EFDA", end_color="E2EFDA", fill_type="solid")
         total_font = Font(name='Arial', size=11, bold=True)
 
-        ws.merge_cells('A1:O1')
+        ws.merge_cells('A1:P1')
         ws['A1'] = "Общий сводный отчет по подключениям"
         ws['A1'].font = title_font
         ws['A1'].alignment = title_alignment
         
-        ws.merge_cells('A2:O2')
+        ws.merge_cells('A2:P2')
         ws['A2'] = f"Период: {period_name}"
         ws['A2'].font = Font(name='Arial', size=11, bold=True)
         ws['A2'].alignment = cell_alignment
         
-        ws.merge_cells('A3:O3')
+        ws.merge_cells('A3:P3')
         ws['A3'] = f"Дата формирования: {datetime.now().strftime('%d.%m.%Y %H:%M')}"
         ws['A3'].font = Font(name='Arial', size=10)
         ws['A3'].alignment = cell_alignment
@@ -339,6 +360,7 @@ class ReportGenerator:
             'SNR бокс',
             'ONU',
             'Медиаконверторы',
+            'SFP модули',
             'Комментарий',
             'Связь с подключением',
         ]
@@ -365,8 +387,9 @@ class ReportGenerator:
         ws.column_dimensions['K'].width = 18  # SNR бокс
         ws.column_dimensions['L'].width = 18  # ONU
         ws.column_dimensions['M'].width = 22  # МК
-        ws.column_dimensions['N'].width = 30  # Комментарий
-        ws.column_dimensions['O'].width = 20  # Связь с подключением
+        ws.column_dimensions['N'].width = 18  # SFP модули
+        ws.column_dimensions['O'].width = 30  # Комментарий
+        ws.column_dimensions['P'].width = 20  # Связь с подключением
 
         current_row = 6
         for idx, conn in enumerate(connections, 1):
@@ -406,6 +429,7 @@ class ReportGenerator:
                 snr_display,
                 conn.get('onu_spent', '-'),
                 conn.get('media_spent', '-'),
+                sfp_display,
                 conn.get('comment') or "-",
                 connection_link,
             ]
@@ -575,12 +599,13 @@ class ReportGenerator:
                 'router': 'Роутер',
                 'snr_box': 'SNR бокс',
                 'onu': 'ONU',
-                'media_converter': 'Медиаконвертор'
+                'media_converter': 'Медиаконвертор',
+                'sfp_module': 'SFP модуль'
             }
             item_type = type_map.get(mov['item_type'], mov['item_type'])
             
             # Количество
-            if mov['item_type'] in ('router', 'snr_box', 'onu', 'media_converter'):
+            if mov['item_type'] in ('router', 'snr_box', 'onu', 'media_converter', 'sfp_module'):
                 quantity_str = f"{int(mov['quantity'])} шт."
                 balance_str = f"{int(mov['balance_after'])} шт."
             else:

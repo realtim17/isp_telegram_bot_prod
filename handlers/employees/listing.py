@@ -26,6 +26,8 @@ async def show_employees_list(flow: "EmployeeFlow", update: Update, context: Con
         onu_count = sum(dev["quantity"] for dev in onu_devices or [])
         media_devices = await run_in_thread(flow.db.get_employee_media_converters, emp["id"])
         media_count = sum(dev["quantity"] for dev in media_devices or [])
+        sfp_modules = await run_in_thread(flow.db.get_employee_sfp_modules, emp["id"])
+        sfp_count = sum(mod["quantity"] for mod in sfp_modules or [])
 
         if (
             fiber_balance > 0
@@ -48,6 +50,8 @@ async def show_employees_list(flow: "EmployeeFlow", update: Update, context: Con
                     onu_count,
                     media_devices or [],
                     media_count,
+                    sfp_modules or [],
+                    sfp_count,
                 )
             )
 
@@ -74,6 +78,8 @@ async def show_employees_list(flow: "EmployeeFlow", update: Update, context: Con
         onu_count,
         media_devices,
         media_count,
+        sfp_modules,
+        sfp_count,
     ) in enumerate(included, 1):
         message_lines.append(f"{idx}. <b>{emp['full_name']}</b>")
         message_lines.append("   📦 Материалы:")
@@ -90,6 +96,11 @@ async def show_employees_list(flow: "EmployeeFlow", update: Update, context: Con
         message_lines.append(f"🧰 SNR боксы: {snr_count} шт.")
         message_lines.append(f"🔌 ONU: {onu_count} шт.")
         message_lines.append(f"🔄 Медиаконверторы: {media_count} шт.")
+        message_lines.append(f"🧿 SFP модули: {sfp_count} шт.")
+        if sfp_modules:
+            message_lines.append("   SFP позиции:")
+            for module in sfp_modules:
+                message_lines.append(f"   • {module['module_name']}: {module['quantity']} шт.")
         message_lines.append("")
 
     message_lines.append("━━━━━━━━━━━━━━━━━━━━━━")

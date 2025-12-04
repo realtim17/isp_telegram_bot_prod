@@ -39,6 +39,11 @@ from config import (
     ENTER_MEDIA_NAME,
     ENTER_MEDIA_QUANTITY,
     CONFIRM_MEDIA_OPERATION,
+    SELECT_EMPLOYEE_FOR_SFP,
+    SELECT_SFP_ACTION,
+    ENTER_SFP_NAME,
+    ENTER_SFP_QUANTITY,
+    CONFIRM_SFP_OPERATION,
     ENTER_OPERATION_COMMENT,
 )
 from database import Database
@@ -54,6 +59,7 @@ from . import (
     admin_control,
     onu,
     media_converters,
+    sfp_modules,
     comments,
 )
 
@@ -164,6 +170,22 @@ class EmployeeFlow:
 
     async def confirm_media_operation(self, update, context):
         return await media_converters.confirm_media_operation(self, update, context)
+
+    # --- SFP модули ---
+    async def select_employee_for_sfp(self, update, context):
+        return await sfp_modules.select_employee_for_sfp(self, update, context)
+
+    async def select_sfp_action(self, update, context):
+        return await sfp_modules.select_sfp_action(self, update, context)
+
+    async def enter_sfp_name(self, update, context):
+        return await sfp_modules.enter_sfp_name(self, update, context)
+
+    async def enter_sfp_quantity(self, update, context):
+        return await sfp_modules.enter_sfp_quantity(self, update, context)
+
+    async def confirm_sfp_operation(self, update, context):
+        return await sfp_modules.confirm_sfp_operation(self, update, context)
 
     # --- Управление доступом ---
     async def access_menu(self, update, context):
@@ -371,6 +393,32 @@ class EmployeeFlow:
                     CallbackQueryHandler(
                         self.confirm_media_operation,
                         pattern="^(media_confirm|media_edit|manage_cancel|media_comment)"
+                    )
+                ],
+                SELECT_EMPLOYEE_FOR_SFP: [
+                    CallbackQueryHandler(
+                        self.select_employee_for_sfp, pattern="^(sfp_emp_|back_to_manage)"
+                    )
+                ],
+                SELECT_SFP_ACTION: [
+                    CallbackQueryHandler(
+                        self.select_sfp_action, pattern="^(sfp_action_.*|sfp_back_to_list|manage_cancel)$"
+                    ),
+                    CallbackQueryHandler(
+                        self.enter_sfp_name, pattern="^sfp_model_.*"
+                    ),
+                ],
+                ENTER_SFP_NAME: [
+                    CallbackQueryHandler(self.enter_sfp_name, pattern="^(sfp_model_.*|manage_cancel)$"),
+                    MessageHandler(text_input_filter, self.enter_sfp_name),
+                ],
+                ENTER_SFP_QUANTITY: [
+                    MessageHandler(text_input_filter, self.enter_sfp_quantity)
+                ],
+                CONFIRM_SFP_OPERATION: [
+                    CallbackQueryHandler(
+                        self.confirm_sfp_operation,
+                        pattern="^(sfp_confirm|sfp_edit|manage_cancel|sfp_comment)"
                     )
                 ],
                 ENTER_OPERATION_COMMENT: [

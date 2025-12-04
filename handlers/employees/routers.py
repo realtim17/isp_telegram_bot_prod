@@ -101,7 +101,7 @@ async def select_router_action(flow: "EmployeeFlow", update: Update, context: Co
         keyboard = [
             [InlineKeyboardButton("📡 SNR AX 2", callback_data="router_model_SNR AX 2")],
             [InlineKeyboardButton("📡 TP-Link AX 12", callback_data="router_model_TP-Link AX 12")],
-            [InlineKeyboardButton("📡 Keenetic Speedster", callback_data="router_model_Keenetic Speedster")],
+            [InlineKeyboardButton("📡 Keenetic Racer", callback_data="router_model_Keenetic Racer")],
             [InlineKeyboardButton("✏️ Ввести вручную", callback_data="router_model_manual")],
             [InlineKeyboardButton("❌ Отмена", callback_data="manage_cancel")],
         ]

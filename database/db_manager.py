@@ -17,6 +17,7 @@ from database.repositories.access_repository import AccessRepository
 from database.repositories.admin_repository import AdminRepository
 from database.repositories.onu_repository import ONURepository
 from database.repositories.media_converter_repository import MediaConverterRepository
+from database.repositories.sfp_module_repository import SFPModuleRepository
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +46,7 @@ class Database:
         self.admin_repo = AdminRepository(self.db_path)
         self.onu_repo = ONURepository(self.db_path)
         self.media_repo = MediaConverterRepository(self.db_path)
+        self.sfp_repo = SFPModuleRepository(self.db_path)
         
         # Создаем/обновляем схему
         self.create_tables()
@@ -77,6 +79,8 @@ class Database:
                 self._migration_v3,
                 self._migration_v4,
                 self._migration_v5,
+                self._migration_v6,
+                self._migration_v7,
             ]
             
             if current_version >= len(migrations):
@@ -323,6 +327,32 @@ class Database:
             cursor.execute("ALTER TABLE connections ADD COLUMN media_converter_quantity INTEGER NOT NULL DEFAULT 0")
         except sqlite3.OperationalError:
             pass
+
+    def _migration_v6(self, cursor: sqlite3.Cursor) -> None:
+        """Хранение SFP модулей сотрудников"""
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS employee_sfp_modules (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                employee_id INTEGER NOT NULL,
+                module_name TEXT NOT NULL,
+                quantity INTEGER NOT NULL DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
+            )
+            """
+        )
+
+    def _migration_v7(self, cursor: sqlite3.Cursor) -> None:
+        """Сохранение выданных SFP модулей в подключениях"""
+        try:
+            cursor.execute("ALTER TABLE connections ADD COLUMN sfp_module_model TEXT NOT NULL DEFAULT '-'")
+        except sqlite3.OperationalError:
+            pass
+        try:
+            cursor.execute("ALTER TABLE connections ADD COLUMN sfp_module_quantity INTEGER NOT NULL DEFAULT 0")
+        except sqlite3.OperationalError:
+            pass
     
     # ==================== ЛОГИРОВАНИЕ ДВИЖЕНИЙ ====================
     
@@ -546,6 +576,39 @@ class Database:
     def get_all_media_converter_names(self) -> List[str]:
         return self.media_repo.get_all_names()
     
+    # ==================== SFP МОДУЛИ ====================
+    def add_sfp_module_to_employee(self, employee_id: int, module_name: str, quantity: int,
+                                   created_by: Optional[int] = None, comment: str = "") -> bool:
+        return self.sfp_repo.add_module(
+            employee_id,
+            module_name,
+            quantity,
+            created_by=created_by,
+            comment=comment
+        )
+
+    def deduct_sfp_module_from_employee(self, employee_id: int, module_name: str, quantity: int = 1,
+                                        connection_id: Optional[int] = None,
+                                        created_by: Optional[int] = None,
+                                        comment: str = "") -> bool:
+        return self.sfp_repo.deduct_module(
+            employee_id,
+            module_name,
+            quantity,
+            connection_id=connection_id,
+            created_by=created_by,
+            comment=comment
+        )
+
+    def get_employee_sfp_modules(self, employee_id: int) -> List[Dict]:
+        return self.sfp_repo.get_modules(employee_id)
+
+    def get_sfp_module_quantity(self, employee_id: int, module_name: str) -> int:
+        return self.sfp_repo.get_quantity(employee_id, module_name)
+
+    def get_all_sfp_module_names(self) -> List[str]:
+        return self.sfp_repo.get_all_names()
+    
     def get_employee_movements(self, employee_id: int, start_date: datetime, 
                               end_date: datetime) -> List[Dict]:
         """Получить все движения материалов и роутеров сотрудника за период"""
@@ -579,6 +642,9 @@ class Database:
         media_converter_model: str = '-',
         media_converter_quantity: int = 0,
         media_payer_id: Optional[int] = None,
+        sfp_module_model: str = '-',
+        sfp_module_quantity: int = 0,
+        sfp_payer_id: Optional[int] = None,
         comment: str = "",
     ) -> Optional[int]:
         """Создать новое подключение и списать материалы/оборудование с одного ответственного."""
@@ -589,8 +655,8 @@ class Database:
 
             cursor.execute("""
                 INSERT INTO connections 
-                (connection_type, address, router_model, snr_box_model, snr_box_quantity, comment, port, fiber_meters, twisted_pair_meters, created_by, router_quantity, contract_signed, router_access, telegram_bot_connected, onu_model, onu_quantity, media_converter_model, media_converter_quantity)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (connection_type, address, router_model, snr_box_model, snr_box_quantity, comment, port, fiber_meters, twisted_pair_meters, created_by, router_quantity, contract_signed, router_access, telegram_bot_connected, onu_model, onu_quantity, media_converter_model, media_converter_quantity, sfp_module_model, sfp_module_quantity)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 connection_type, address, router_model, snr_box_model, snr_box_quantity or 0, comment or "",
                 port, fiber_meters, twisted_pair_meters, created_by,
@@ -598,6 +664,7 @@ class Database:
                 1 if router_access else 0, 1 if telegram_bot_connected else 0,
                 onu_model or "-", onu_quantity or 0,
                 media_converter_model or "-", media_converter_quantity or 0,
+                sfp_module_model or "-", sfp_module_quantity or 0,
             ))
 
             connection_id = cursor.lastrowid
@@ -679,6 +746,20 @@ class Database:
                 ):
                     raise RuntimeError(
                         f"Не удалось списать медиаконвертор '{media_converter_model}' x{media_converter_quantity} с сотрудника ID {payer}"
+                    )
+
+            if sfp_module_model and sfp_module_model != '-' and sfp_module_quantity > 0 and employee_ids:
+                payer = sfp_payer_id or employee_ids[0]
+                if not self.sfp_repo.deduct_module(
+                    payer,
+                    sfp_module_model,
+                    sfp_module_quantity,
+                    connection_id,
+                    created_by,
+                    connection=conn,
+                ):
+                    raise RuntimeError(
+                        f"Не удалось списать SFP модуль '{sfp_module_model}' x{sfp_module_quantity} с сотрудника ID {payer}"
                     )
             
             for idx, photo_id in enumerate(photo_file_ids):
