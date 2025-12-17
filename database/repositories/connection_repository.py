@@ -23,7 +23,7 @@ class ConnectionRepository(BaseRepository):
             cursor.execute("""
                 SELECT id, connection_type, address, router_model, port, fiber_meters, 
                        snr_box_model, snr_box_quantity, comment, twisted_pair_meters, created_at, created_by, router_quantity, 
-                       contract_signed, router_access, telegram_bot_connected,
+                       contract_signed, router_access,
                        onu_model, onu_quantity, media_converter_model, media_converter_quantity,
                        sfp_module_model, sfp_module_quantity
                 FROM connections

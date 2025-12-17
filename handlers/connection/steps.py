@@ -7,7 +7,7 @@ from telegram.ext import ContextTypes, ConversationHandler
 from config import (
     SELECT_CONNECTION_TYPE, UPLOAD_PHOTOS, ENTER_ADDRESS,
     ENTER_PORT, ENTER_FIBER,
-    ENTER_TWISTED, CONTRACT_SIGNED, TELEGRAM_BOT_CONFIRM, SELECT_SNR_BOX,
+    ENTER_TWISTED, CONTRACT_SIGNED, SELECT_SNR_BOX,
     SELECT_ONU_ACTION, ENTER_ONU_QUANTITY, SELECT_MEDIA_ACTION, ENTER_MEDIA_QUANTITY,
     ENTER_COMMENT, ENTER_SNR_QUANTITY_CONNECTION, CONNECTION_TYPES
 )
@@ -32,7 +32,7 @@ CANCEL_TEXT = CANCEL_TEXT or LEGACY_CANCEL_TEXT
 
 # Вспомогательные шаги для перестановки последовательности
 async def start_snr_step(update: Update, context: ContextTypes.DEFAULT_TYPE, db) -> int:
-    """Шаг выбора SNR бокса (Шаг 10/17)"""
+    """Шаг выбора SNR бокса (Шаг 10/16)"""
     snr_names = await run_in_thread(db.get_all_snr_box_names) or []
     context.user_data.setdefault('connection_data', {})
     context.user_data['connection_data'].setdefault('snr_box_model', '-')
@@ -45,7 +45,7 @@ async def start_snr_step(update: Update, context: ContextTypes.DEFAULT_TYPE, db)
         if chat_id:
             await context.bot.send_message(
                 chat_id=chat_id,
-                text="🧰 <b>Шаг 10/17: SNR Оптический бокс</b>\n\n⏭️ Пропущено.",
+                text="🧰 <b>Шаг 10/16: SNR Оптический бокс</b>\n\n⏭️ Пропущено.",
                 parse_mode='HTML'
             )
         return await start_onu_step(update, context, db)
@@ -58,7 +58,7 @@ async def start_snr_step(update: Update, context: ContextTypes.DEFAULT_TYPE, db)
     reply_markup = build_inline_keyboard(keyboard)
 
     text = (
-        "🧰 <b>Шаг 10/17: SNR Оптический бокс</b>\n\n"
+        "🧰 <b>Шаг 10/16: SNR Оптический бокс</b>\n\n"
         "Выберите модель или пропустите шаг:"
     )
     if chat_id:
@@ -72,14 +72,14 @@ async def start_snr_step(update: Update, context: ContextTypes.DEFAULT_TYPE, db)
 
 
 async def start_contract_step(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Шаг подтверждения договора (Шаг 14/17)"""
+    """Шаг подтверждения договора (Шаг 14/16)"""
     reply_markup = build_inline_keyboard([
         [InlineKeyboardButton("✅ Подтвердить", callback_data='contract_confirmed')],
         [InlineKeyboardButton("⏭️ Пропустить", callback_data='contract_skipped')],
     ])
 
     message_text = (
-        "📄 <b>Шаг 14/17: Договор подписан, памятка передана</b>\n\n"
+        "📄 <b>Шаг 14/16: Договор подписан, памятка передана</b>\n\n"
         "Подтвердите, что договор подписан и памятка передана абоненту:"
     )
     chat_id = update.effective_chat.id if update.effective_chat else None
@@ -108,7 +108,7 @@ async def new_connection_start(update: Update, context: ContextTypes.DEFAULT_TYP
     ])
     
     text = """
-🏢 <b>Шаг 1/17: Тип подключения</b>
+🏢 <b>Шаг 1/16: Тип подключения</b>
 
 Выберите тип подключения:
 
@@ -144,13 +144,13 @@ async def select_connection_type(update: Update, context: ContextTypes.DEFAULT_T
     ])
 
     step_one_result = (
-        "🏢 <b>Шаг 1/17: Тип подключения</b>\n\n"
+        "🏢 <b>Шаг 1/16: Тип подключения</b>\n\n"
         f"✅ Выбрано: <b>{type_name}</b>"
     )
     await query.edit_message_text(step_one_result, parse_mode='HTML')
 
     photos_prompt = (
-        "📸 <b>Шаг 2/17: Загрузка фотографий</b>\n\n"
+        "📸 <b>Шаг 2/16: Загрузка фотографий</b>\n\n"
         f"Загрузите фотографии с места подключения (до {MAX_PHOTOS} штук).\n"
         "После загрузки фото нажмите \"Продолжить\".\n\n"
         f"{PHOTO_REQUIREMENTS}\n\n"
@@ -187,7 +187,7 @@ async def enter_address(update: Update, context: ContextTypes.DEFAULT_TYPE, db) 
     context.user_data['connection_data']['address'] = address
     
     await update.message.reply_text(
-        "📍 <b>Шаг 3/17: Адрес подключения</b>\n\n"
+        "📍 <b>Шаг 3/16: Адрес подключения</b>\n\n"
         f"✅ Адрес: {address}",
         reply_markup=ReplyKeyboardRemove(),
         parse_mode='HTML'
@@ -196,8 +196,8 @@ async def enter_address(update: Update, context: ContextTypes.DEFAULT_TYPE, db) 
     return await start_router_step(update, context, db, address=address)
 
 
-async def contract_signed(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Обработка подтверждения договора и переход к подключению Телеграмм Бота"""
+async def contract_signed(update: Update, context: ContextTypes.DEFAULT_TYPE, db) -> int:
+    """Обработка подтверждения договора и переход к комментарию"""
     query = update.callback_query
     await query.answer()
     
@@ -210,55 +210,16 @@ async def contract_signed(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     contract_confirmed = (query.data == 'contract_confirmed')
     context.user_data['connection_data']['contract_signed'] = contract_confirmed
     contract_status_text = (
-        "📄 <b>Шаг 14/17: Договор подписан, памятка передана</b>\n\n"
+        "📄 <b>Шаг 14/16: Договор подписан, памятка передана</b>\n\n"
         "✅ Подтверждено"
         if contract_confirmed
-        else "📄 <b>Шаг 14/17: Договор подписан, памятка передана</b>\n\n"
+        else "📄 <b>Шаг 14/16: Договор подписан, памятка передана</b>\n\n"
              "⏭️ Пропущено"
     )
     
-    # Переходим к новому шагу "Телеграмм Бот"
-    reply_markup = build_inline_keyboard([
-        [InlineKeyboardButton("✅ Подтвердить", callback_data='telegram_bot_confirmed')],
-        [InlineKeyboardButton("⏭️ Пропустить", callback_data='telegram_bot_skipped')]
-    ])
-
     await query.edit_message_text(
         contract_status_text,
         parse_mode='HTML'
     )
-    await query.message.reply_text(
-        "🤖 <b>Шаг 15/17: Телеграмм Бот</b>\n\n"
-        "Подтвердите, что абонентский Телеграмм Бот подключен:",
-        reply_markup=reply_markup,
-        parse_mode='HTML'
-    )
     
-    return TELEGRAM_BOT_CONFIRM
-
-
-async def telegram_bot_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE, db) -> int:
-    """Обработка подтверждения подключения Телеграмм Бота"""
-    query = update.callback_query
-    await query.answer()
-    
-    if query.data == 'cancel_connection':
-        return await cancel_connection(update, context)
-    
-    # Сохраняем информацию о подключении Телеграмм Бота
-    if 'connection_data' not in context.user_data:
-        context.user_data['connection_data'] = {}
-    
-    if query.data == 'telegram_bot_confirmed':
-        context.user_data['connection_data']['telegram_bot_connected'] = True
-        status_text = "🤖 <b>Шаг 15/17: Телеграмм Бот</b>\n\n✅ Телеграмм Бот подключен"
-    else:  # telegram_bot_skipped
-        context.user_data['connection_data']['telegram_bot_connected'] = False
-        status_text = "🤖 <b>Шаг 15/17: Телеграмм Бот</b>\n\n⏭️ Телеграмм Бот пропущен"
-
-    await query.edit_message_text(
-        status_text,
-        parse_mode='HTML'
-    )
-
     return await start_comment_step(update, context, db)

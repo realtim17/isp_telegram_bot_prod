@@ -9,7 +9,7 @@ from handlers.connection.constants import MAX_PHOTOS
 from handlers.connection.ui import build_inline_keyboard, cancel_reply_keyboard
 
 
-PHOTOS_STEP_HEADER = "📸 <b>Шаг 2/17: Загрузка фотографий</b>"
+PHOTOS_STEP_HEADER = "📸 <b>Шаг 2/16: Загрузка фотографий</b>"
 
 
 async def upload_photos(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -85,7 +85,7 @@ async def ask_address(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
     )
 
     await query.message.reply_text(
-        "📍 <b>Шаг 3/17: Адрес подключения</b>\n\n"
+        "📍 <b>Шаг 3/16: Адрес подключения</b>\n\n"
         "Введите адрес подключения абонента:",
         reply_markup=cancel_reply_keyboard(),
         parse_mode='HTML'

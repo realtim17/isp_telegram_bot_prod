@@ -22,7 +22,7 @@ async def start_comment_step(update: Update, context: ContextTypes.DEFAULT_TYPE,
         return ENTER_COMMENT
 
     message_text = (
-        "💬 <b>Шаг 16/17: Комментарий</b>\n\n"
+        "💬 <b>Шаг 15/16: Комментарий</b>\n\n"
         "Оставьте комментарий по подключению (сложности, нюансы, потраченные материалы и т.д.).\n"
         "Если комментарий не нужен, нажмите \"Пропустить\"."
     )
@@ -55,12 +55,12 @@ async def enter_comment(update: Update, context: ContextTypes.DEFAULT_TYPE, db) 
     context.user_data['connection_data']['comment'] = "-" if text == SKIP_TEXT or not text else text
 
     confirm_text = (
-        "💬 <b>Шаг 16/17: Комментарий</b>\n\n"
+        "💬 <b>Шаг 15/16: Комментарий</b>\n\n"
         "✅ Комментарий сохранен."
     )
     if text == SKIP_TEXT or not text:
         confirm_text = (
-            "💬 <b>Шаг 16/17: Комментарий</b>\n\n"
+            "💬 <b>Шаг 15/16: Комментарий</b>\n\n"
             "⏭️ Комментарий пропущен."
         )
     await update.message.reply_text(confirm_text, reply_markup=ReplyKeyboardRemove(), parse_mode='HTML')

@@ -76,14 +76,20 @@ def main():
     application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
     
     # Фильтр для ввода данных (исключает кнопки главного меню)
+    private_chats = filters.ChatType.PRIVATE
+
     text_input_filter = (
+        private_chats &
         filters.TEXT & 
         ~filters.COMMAND & 
+        ~filters.FORWARDED &
         ~filters.Regex('^(📝 Новое подключение|📊 Сводный отчет|👥 Управление сотрудниками|ℹ️ Помощь)$')
     )
     
     # Фильтр для кнопок главного меню
-    menu_buttons_filter = filters.Regex('^(📝 Новое подключение|📊 Сводный отчет|👥 Управление сотрудниками|📦 Материалы и оборудование|ℹ️ Помощь)$')
+    menu_buttons_filter = private_chats & filters.Regex(
+        '^(📝 Новое подключение|📊 Сводный отчет|👥 Управление сотрудниками|📦 Материалы и оборудование|ℹ️ Помощь)$'
+    )
     
     # Обертки для передачи db в обработчики отчетов и сотрудников
     async def report_start_wrapper(update, context):
@@ -101,8 +107,8 @@ def main():
     # Обработчик отчетов
     report_conv = ConversationHandler(
         entry_points=[
-            CommandHandler('report', report_start_wrapper),
-            MessageHandler(filters.Regex('^📊 Сводный отчет$'), report_start_wrapper)
+            CommandHandler('report', report_start_wrapper, filters=private_chats),
+            MessageHandler(private_chats & filters.Regex('^📊 Сводный отчет$'), report_start_wrapper)
         ],
         states={
             SELECT_REPORT_EMPLOYEE: [CallbackQueryHandler(report_select_period_wrapper, pattern='^(rep_emp_|rep_all|report_cancel)')],
@@ -111,8 +117,8 @@ def main():
             ENTER_REPORT_CUSTOM_END: [MessageHandler(text_input_filter, report_custom_end_wrapper)]
         },
         fallbacks=[
-            CommandHandler('cancel', cancel_command),
-            CommandHandler('stop', stop_command),
+            CommandHandler('cancel', cancel_command, filters=private_chats),
+            CommandHandler('stop', stop_command, filters=private_chats),
             MessageHandler(menu_buttons_filter, cancel_and_start_new)
         ]
     )
@@ -120,14 +126,18 @@ def main():
     employee_conv = employee_flow.build_conversation(
         text_input_filter,
         fallbacks=[
-            CommandHandler('cancel', cancel_command),
-            CommandHandler('stop', stop_command),
+            CommandHandler('cancel', cancel_command, filters=private_chats),
+            CommandHandler('stop', stop_command, filters=private_chats),
             MessageHandler(menu_buttons_filter, cancel_and_start_new)
         ]
     )
     
     # Глобальный guard доступа
     async def authorization_guard(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        chat = update.effective_chat
+        if chat and chat.type != 'private':
+            raise ApplicationHandlerStop
+
         user = update.effective_user
         # Фиксируем флаг администратора для дальнейших вызовов get_main_keyboard
         is_admin = admin_manager.is_admin(user.id) if user else False
@@ -140,14 +150,14 @@ def main():
     application.add_handler(TypeHandler(Update, authorization_guard), group=-1)
     
     # Добавляем обработчики
-    application.add_handler(CommandHandler('start', start_command))
-    application.add_handler(CommandHandler('help', help_command))
-    application.add_handler(CommandHandler('stop', stop_command))
+    application.add_handler(CommandHandler('start', start_command, filters=private_chats))
+    application.add_handler(CommandHandler('help', help_command, filters=private_chats))
+    application.add_handler(CommandHandler('stop', stop_command, filters=private_chats))
     application.add_handler(connection_conv)
     application.add_handler(report_conv)
     application.add_handler(employee_conv)
-    application.add_handler(MessageHandler(filters.Regex('^📋 Список сотрудников МОЛ$'), employee_flow.show_employees_list))
-    application.add_handler(MessageHandler(filters.Regex('^ℹ️ Помощь$'), help_command))
+    application.add_handler(MessageHandler(private_chats & filters.Regex('^📋 Список сотрудников МОЛ$'), employee_flow.show_employees_list))
+    application.add_handler(MessageHandler(private_chats & filters.Regex('^ℹ️ Помощь$'), help_command))
     
     # Fallback для неизвестных команд
     async def unknown_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -157,7 +167,7 @@ def main():
         )
     
     application.add_handler(MessageHandler(
-        filters.TEXT & ~filters.COMMAND & ~menu_buttons_filter,
+        private_chats & filters.TEXT & ~filters.COMMAND & ~menu_buttons_filter,
         unknown_command
     ))
     

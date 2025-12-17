@@ -179,9 +179,6 @@ async def show_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE, 
     router_access = data.get('router_access', False)
     router_access_status = "✅ Получен" if router_access else "⏭️ Пропущено"
     
-    # Получаем информацию о Телеграмм Боте
-    telegram_bot_connected = data.get('telegram_bot_connected', False)
-    telegram_bot_status = "✅ Подключен" if telegram_bot_connected else "-"
     comment_text = data.get('comment') or "-"
     
     report_preview = _format_report_text("ПРЕДПРОСМОТР", data, employee_names).strip()
@@ -255,7 +252,6 @@ async def confirm_connection(update: Update, context: ContextTypes.DEFAULT_TYPE,
         router_quantity = data.get('router_quantity', 1)
         contract_signed = data.get('contract_signed', False)
         router_access = data.get('router_access', False)
-        telegram_bot_connected = data.get('telegram_bot_connected', False)
         snr_box_model = data.get('snr_box_model', '-')
         snr_box_quantity = data.get('snr_box_quantity', 0) or 0
         
@@ -276,7 +272,6 @@ async def confirm_connection(update: Update, context: ContextTypes.DEFAULT_TYPE,
                 router_quantity=router_quantity,
                 contract_signed=contract_signed,
                 router_access=router_access,
-                telegram_bot_connected=telegram_bot_connected,
                 router_payer_id=router_payer_id,
                 snr_box_payer_id=snr_box_payer_id,
                 snr_box_quantity=snr_box_quantity,

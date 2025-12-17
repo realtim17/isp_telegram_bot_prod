@@ -7,7 +7,7 @@ from telegram.ext import ConversationHandler, MessageHandler, CallbackQueryHandl
 from config import (
     SELECT_CONNECTION_TYPE, UPLOAD_PHOTOS, ENTER_ADDRESS, SELECT_ROUTER,
     ENTER_ROUTER_QUANTITY_CONNECTION, ROUTER_ACCESS, ENTER_PORT, ENTER_FIBER,
-    ENTER_TWISTED, CONTRACT_SIGNED, TELEGRAM_BOT_CONFIRM, SELECT_EMPLOYEES, 
+    ENTER_TWISTED, CONTRACT_SIGNED, SELECT_EMPLOYEES, 
     SELECT_MATERIAL_PAYER, SELECT_ROUTER_PAYER, SELECT_SNR_BOX, SELECT_SNR_PAYER, CONFIRM,
     SELECT_ONU_ACTION, ENTER_ONU_QUANTITY, SELECT_MEDIA_ACTION, ENTER_MEDIA_QUANTITY,
     SELECT_SFP_ACTION, ENTER_SFP_QUANTITY,
@@ -20,7 +20,6 @@ from handlers.connection.steps import (
     select_connection_type,
     enter_address,
     contract_signed,
-    telegram_bot_confirm,
 )
 
 from handlers.connection.cabling import (
@@ -74,12 +73,11 @@ from handlers.connection.cancellation import (
 
 def build_connection_conversation(db) -> ConversationHandler:
     """Построить ConversationHandler с внедренным экземпляром БД"""
-    
+    async def contract_signed_wrapper(update, context):
+        return await contract_signed(update, context, db)
+
     async def enter_address_wrapper(update, context):
         return await enter_address(update, context, db)
-    
-    async def telegram_bot_confirm_wrapper(update, context):
-        return await telegram_bot_confirm(update, context, db)
     
     async def select_snr_box_wrapper(update, context):
         return await select_snr_box(update, context, db)
@@ -166,10 +164,7 @@ def build_connection_conversation(db) -> ConversationHandler:
                 MessageHandler(filters.TEXT & ~filters.COMMAND, enter_twisted_wrapper)
             ],
             CONTRACT_SIGNED: [
-                CallbackQueryHandler(contract_signed, pattern='^(contract_confirmed|contract_skipped|cancel_connection)$')
-            ],
-            TELEGRAM_BOT_CONFIRM: [
-                CallbackQueryHandler(telegram_bot_confirm_wrapper, pattern='^(telegram_bot_confirmed|telegram_bot_skipped|cancel_connection)$')
+                CallbackQueryHandler(contract_signed_wrapper, pattern='^(contract_confirmed|contract_skipped|cancel_connection)$')
             ],
             SELECT_SNR_BOX: [
                 CallbackQueryHandler(select_snr_box_wrapper, pattern='^(snr_box_.*|snr_skip|cancel_connection)$')

@@ -48,7 +48,7 @@ async def start_employee_selection(
     reply_markup = build_inline_keyboard(keyboard)
     
     message_text = (
-        "👥 <b>Шаг 17/17: Выбор исполнителей</b>\n\n"
+        "👥 <b>Шаг 16/16: Выбор исполнителей</b>\n\n"
         "Выберите сотрудников, которые участвовали в подключении:\n"
         "(можно выбрать нескольких)"
     )

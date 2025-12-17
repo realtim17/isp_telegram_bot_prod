@@ -29,17 +29,17 @@ async def router_access_handler(update: Update, context: ContextTypes.DEFAULT_TY
     context.user_data.setdefault('connection_data', {})
     if query.data == 'router_access_confirmed':
         context.user_data['connection_data']['router_access'] = True
-        status_text = "🔐 <b>Шаг 6/17: Доступ на роутер</b>\n\n✅ Доступ получен"
+        status_text = "🔐 <b>Шаг 6/16: Доступ на роутер</b>\n\n✅ Доступ получен"
     else:
         context.user_data['connection_data']['router_access'] = False
-        status_text = "🔐 <b>Шаг 6/17: Доступ на роутер</b>\n\n⏭️ Пропущено"
+        status_text = "🔐 <b>Шаг 6/16: Доступ на роутер</b>\n\n⏭️ Пропущено"
 
     await query.edit_message_text(
         status_text,
         parse_mode='HTML'
     )
     await query.message.reply_text(
-        "🔌 <b>Шаг 7/17: Номер порта</b>\n\n"
+        "🔌 <b>Шаг 7/16: Номер порта</b>\n\n"
         "Введите номер порта или воспользуйтесь кнопкой \"Пропустить\":",
         reply_markup=build_reply_keyboard([[SKIP_TEXT]]),
         parse_mode='HTML'
@@ -49,7 +49,7 @@ async def router_access_handler(update: Update, context: ContextTypes.DEFAULT_TY
 
 async def _send_fiber_prompt(message) -> None:
     await message.reply_text(
-        "📏 <b>Шаг 8/17: Метраж ВОЛС</b>\n\n"
+        "📏 <b>Шаг 8/16: Метраж ВОЛС</b>\n\n"
         "Введите количество метров ВОЛС (волоконно-оптической линии связи) или нажмите \"Пропустить\":",
         reply_markup=build_reply_keyboard([[SKIP_TEXT]], add_cancel=True),
         parse_mode='HTML'
@@ -66,7 +66,7 @@ async def enter_port(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
             context.user_data.setdefault('connection_data', {})
             context.user_data['connection_data']['port'] = '-'
             await query.message.reply_text(
-                "🔌 <b>Шаг 7/17: Номер порта</b>\n\n⏭️ Порт пропущен.",
+                "🔌 <b>Шаг 7/16: Номер порта</b>\n\n⏭️ Порт пропущен.",
                 parse_mode='HTML',
                 reply_markup=ReplyKeyboardRemove()
             )
@@ -88,7 +88,7 @@ async def enter_port(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     if port == SKIP_TEXT:
         context.user_data['connection_data']['port'] = '-'
         await update.message.reply_text(
-            "🔌 <b>Шаг 7/17: Номер порта</b>\n\n⏭️ Порт пропущен.",
+            "🔌 <b>Шаг 7/16: Номер порта</b>\n\n⏭️ Порт пропущен.",
             reply_markup=ReplyKeyboardRemove(),
             parse_mode='HTML'
         )
@@ -97,7 +97,7 @@ async def enter_port(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 
     context.user_data['connection_data']['port'] = port
     await update.message.reply_text(
-        f"🔌 <b>Шаг 7/17: Номер порта</b>\n\n✅ Порт: {port}",
+        f"🔌 <b>Шаг 7/16: Номер порта</b>\n\n✅ Порт: {port}",
         reply_markup=ReplyKeyboardRemove(),
         parse_mode='HTML'
     )
@@ -119,12 +119,12 @@ async def enter_fiber(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
         context.user_data.setdefault('connection_data', {})
         context.user_data['connection_data']['fiber_meters'] = 0.0
         await update.message.reply_text(
-            "📏 <b>Шаг 8/17: Метраж ВОЛС</b>\n\n⏭️ Пропущено.",
+            "📏 <b>Шаг 8/16: Метраж ВОЛС</b>\n\n⏭️ Пропущено.",
             reply_markup=ReplyKeyboardRemove(),
             parse_mode='HTML'
         )
         await update.message.reply_text(
-            "📏 <b>Шаг 9/17: Метраж витой пары</b>\n\n"
+            "📏 <b>Шаг 9/16: Метраж витой пары</b>\n\n"
             "Введите количество метров витой пары или нажмите \"Пропустить\":",
             reply_markup=build_reply_keyboard([[SKIP_TEXT]], add_cancel=True),
             parse_mode='HTML'
@@ -141,12 +141,12 @@ async def enter_fiber(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
     context.user_data.setdefault('connection_data', {})
     context.user_data['connection_data']['fiber_meters'] = fiber
     await update.message.reply_text(
-        f"📏 <b>Шаг 8/17: Метраж ВОЛС</b>\n\n✅ ВОЛС: {fiber} м",
+        f"📏 <b>Шаг 8/16: Метраж ВОЛС</b>\n\n✅ ВОЛС: {fiber} м",
         reply_markup=ReplyKeyboardRemove(),
         parse_mode='HTML'
     )
     await update.message.reply_text(
-        "📏 <b>Шаг 9/17: Метраж витой пары</b>\n\n"
+        "📏 <b>Шаг 9/16: Метраж витой пары</b>\n\n"
         "Введите количество метров витой пары или нажмите \"Пропустить\":",
         reply_markup=build_reply_keyboard([[SKIP_TEXT]], add_cancel=True),
         parse_mode='HTML'
@@ -168,7 +168,7 @@ async def enter_twisted(update: Update, context: ContextTypes.DEFAULT_TYPE, db) 
         context.user_data.setdefault('connection_data', {})
         context.user_data['connection_data']['twisted_pair_meters'] = 0.0
         await update.message.reply_text(
-            "📏 <b>Шаг 9/17: Метраж витой пары</b>\n\n⏭️ Пропущено.",
+            "📏 <b>Шаг 9/16: Метраж витой пары</b>\n\n⏭️ Пропущено.",
             reply_markup=ReplyKeyboardRemove(),
             parse_mode='HTML'
         )
@@ -186,7 +186,7 @@ async def enter_twisted(update: Update, context: ContextTypes.DEFAULT_TYPE, db) 
     context.user_data.setdefault('connection_data', {})
     context.user_data['connection_data']['twisted_pair_meters'] = twisted
     await update.message.reply_text(
-        f"📏 <b>Шаг 9/17: Метраж витой пары</b>\n\n✅ Витая пара: {twisted} м",
+        f"📏 <b>Шаг 9/16: Метраж витой пары</b>\n\n✅ Витая пара: {twisted} м",
         reply_markup=ReplyKeyboardRemove(),
         parse_mode='HTML'
     )

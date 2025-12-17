@@ -105,16 +105,13 @@ def _format_report_text(connection_id: int, data: Dict, employee_names: List[str
     router_access = data.get('router_access', False)
     router_access_status = "✅ Получен" if router_access else "⏭️ Пропущено"
     
-    # Получаем информацию о Телеграмм Боте
-    telegram_bot_connected = data.get('telegram_bot_connected', False)
-    telegram_bot_status = "✅ Подключен" if telegram_bot_connected else "-"
     comment_text = data.get('comment') or "-"
     
     return f"""
 <b>📋 ОТЧЕТ О ПОДКЛЮЧЕНИИ #{connection_id}</b>
 
 <b>📍 Адрес:</b> {data['address']}
-<b> Тип подключения:</b> {type_name}
+<b>🏢 Шаг 1/17: Тип подключения:</b> {type_name}
 <b> Модель роутера:</b> {router_info}
 <b> SNR бокс:</b> {snr_info}
 <b> ONU абон.терминал:</b> {onu_info}
@@ -122,8 +119,7 @@ def _format_report_text(connection_id: int, data: Dict, employee_names: List[str
 <b> SFP модуль:</b> {sfp_info}
 <b> Доступ на роутер:</b> {router_access_status}
 <b> Договор:</b> {contract_status}
-<b> Телеграмм Бот:</b> {telegram_bot_status}
-<b> Порт:</b> {port_display}
+<b>🔌 Шаг 7/17: Номер порта:</b> {port_display}
 
 <b>📝 Комментарий:</b> {comment_text}
 

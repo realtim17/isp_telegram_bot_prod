@@ -143,8 +143,7 @@ class Database:
                 created_by INTEGER NOT NULL,
                 router_quantity INTEGER DEFAULT 1,
                 contract_signed INTEGER DEFAULT 0,
-                router_access INTEGER DEFAULT 0,
-                telegram_bot_connected INTEGER DEFAULT 0
+                router_access INTEGER DEFAULT 0
             )
         """)
         for stmt in (
@@ -155,7 +154,6 @@ class Database:
             "ALTER TABLE connections ADD COLUMN comment TEXT DEFAULT ''",
             "ALTER TABLE connections ADD COLUMN contract_signed INTEGER DEFAULT 0",
             "ALTER TABLE connections ADD COLUMN router_access INTEGER DEFAULT 0",
-            "ALTER TABLE connections ADD COLUMN telegram_bot_connected INTEGER DEFAULT 0",
             "ALTER TABLE connections ADD COLUMN onu_model TEXT NOT NULL DEFAULT '-'",
             "ALTER TABLE connections ADD COLUMN onu_quantity INTEGER NOT NULL DEFAULT 0",
             "ALTER TABLE connections ADD COLUMN media_converter_model TEXT NOT NULL DEFAULT '-'",
@@ -632,7 +630,6 @@ class Database:
         router_quantity: int = 1,
         contract_signed: bool = False,
         router_access: bool = False,
-        telegram_bot_connected: bool = False,
         router_payer_id: Optional[int] = None,
         snr_box_payer_id: Optional[int] = None,
         snr_box_quantity: int = 0,
@@ -655,13 +652,13 @@ class Database:
 
             cursor.execute("""
                 INSERT INTO connections 
-                (connection_type, address, router_model, snr_box_model, snr_box_quantity, comment, port, fiber_meters, twisted_pair_meters, created_by, router_quantity, contract_signed, router_access, telegram_bot_connected, onu_model, onu_quantity, media_converter_model, media_converter_quantity, sfp_module_model, sfp_module_quantity)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (connection_type, address, router_model, snr_box_model, snr_box_quantity, comment, port, fiber_meters, twisted_pair_meters, created_by, router_quantity, contract_signed, router_access, onu_model, onu_quantity, media_converter_model, media_converter_quantity, sfp_module_model, sfp_module_quantity)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 connection_type, address, router_model, snr_box_model, snr_box_quantity or 0, comment or "",
                 port, fiber_meters, twisted_pair_meters, created_by,
                 router_quantity, 1 if contract_signed else 0,
-                1 if router_access else 0, 1 if telegram_bot_connected else 0,
+                1 if router_access else 0,
                 onu_model or "-", onu_quantity or 0,
                 media_converter_model or "-", media_converter_quantity or 0,
                 sfp_module_model or "-", sfp_module_quantity or 0,
