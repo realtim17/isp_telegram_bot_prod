@@ -45,6 +45,21 @@ from config import (
     ENTER_SFP_QUANTITY,
     CONFIRM_SFP_OPERATION,
     ENTER_OPERATION_COMMENT,
+    TMC_SELECT_EMPLOYEE,
+    TMC_ENTER_FIBER,
+    TMC_ENTER_TWISTED,
+    TMC_SELECT_ROUTER,
+    TMC_ENTER_ROUTER_QTY,
+    TMC_SELECT_SNR,
+    TMC_ENTER_SNR_QTY,
+    TMC_SELECT_ONU,
+    TMC_ENTER_ONU_QTY,
+    TMC_SELECT_MEDIA,
+    TMC_ENTER_MEDIA_QTY,
+    TMC_SELECT_SFP,
+    TMC_ENTER_SFP_QTY,
+    TMC_COMMENT,
+    TMC_CONFIRM,
 )
 from database import Database
 
@@ -61,6 +76,7 @@ from . import (
     media_converters,
     sfp_modules,
     comments,
+    tmc_flow,
 )
 
 
@@ -186,6 +202,58 @@ class EmployeeFlow:
 
     async def confirm_sfp_operation(self, update, context):
         return await sfp_modules.confirm_sfp_operation(self, update, context)
+
+    # --- Выдача ТМЦ ---
+    async def start_tmc_flow(self, update, context):
+        return await tmc_flow.start_issue_flow(self, update, context)
+
+    async def tmc_select_employee(self, update, context):
+        return await tmc_flow.select_employee(self, update, context)
+
+    async def tmc_enter_fiber(self, update, context):
+        return await tmc_flow.enter_fiber(self, update, context)
+
+    async def tmc_enter_twisted(self, update, context):
+        return await tmc_flow.enter_twisted(self, update, context)
+
+    async def tmc_manual_model_input(self, update, context):
+        return await tmc_flow.manual_model_input(self, update, context)
+
+    async def tmc_select_router(self, update, context):
+        return await tmc_flow.select_router(self, update, context)
+
+    async def tmc_select_snr(self, update, context):
+        return await tmc_flow.select_snr(self, update, context)
+
+    async def tmc_select_onu(self, update, context):
+        return await tmc_flow.select_onu(self, update, context)
+
+    async def tmc_select_media(self, update, context):
+        return await tmc_flow.select_media(self, update, context)
+
+    async def tmc_select_sfp(self, update, context):
+        return await tmc_flow.select_sfp(self, update, context)
+
+    async def tmc_enter_router_quantity(self, update, context):
+        return await tmc_flow.enter_router_quantity(self, update, context)
+
+    async def tmc_enter_snr_quantity(self, update, context):
+        return await tmc_flow.enter_snr_quantity(self, update, context)
+
+    async def tmc_enter_onu_quantity(self, update, context):
+        return await tmc_flow.enter_onu_quantity(self, update, context)
+
+    async def tmc_enter_media_quantity(self, update, context):
+        return await tmc_flow.enter_media_quantity(self, update, context)
+
+    async def tmc_enter_sfp_quantity(self, update, context):
+        return await tmc_flow.enter_sfp_quantity(self, update, context)
+
+    async def tmc_enter_comment(self, update, context):
+        return await tmc_flow.enter_comment(self, update, context)
+
+    async def tmc_confirm_operation(self, update, context):
+        return await tmc_flow.confirm_operation(self, update, context)
 
     # --- Управление доступом ---
     async def access_menu(self, update, context):
@@ -419,6 +487,62 @@ class EmployeeFlow:
                     CallbackQueryHandler(
                         self.confirm_sfp_operation,
                         pattern="^(sfp_confirm|sfp_edit|manage_cancel|sfp_comment)"
+                    )
+                ],
+                TMC_SELECT_EMPLOYEE: [
+                    CallbackQueryHandler(
+                        self.tmc_select_employee,
+                        pattern="^(tmc_emp_|tmc_cancel|tmc_back_to_menu)"
+                    )
+                ],
+                TMC_ENTER_FIBER: [
+                    MessageHandler(text_input_filter, self.tmc_enter_fiber)
+                ],
+                TMC_ENTER_TWISTED: [
+                    MessageHandler(text_input_filter, self.tmc_enter_twisted)
+                ],
+                TMC_SELECT_ROUTER: [
+                    CallbackQueryHandler(self.tmc_select_router, pattern="^(tmc_router_.*|tmc_cancel)$"),
+                    MessageHandler(text_input_filter, self.tmc_manual_model_input),
+                ],
+                TMC_ENTER_ROUTER_QTY: [
+                    MessageHandler(text_input_filter, self.tmc_enter_router_quantity)
+                ],
+                TMC_SELECT_SNR: [
+                    CallbackQueryHandler(self.tmc_select_snr, pattern="^(tmc_snr_.*|tmc_cancel)$"),
+                    MessageHandler(text_input_filter, self.tmc_manual_model_input),
+                ],
+                TMC_ENTER_SNR_QTY: [
+                    MessageHandler(text_input_filter, self.tmc_enter_snr_quantity)
+                ],
+                TMC_SELECT_ONU: [
+                    CallbackQueryHandler(self.tmc_select_onu, pattern="^(tmc_onu_.*|tmc_cancel)$"),
+                    MessageHandler(text_input_filter, self.tmc_manual_model_input),
+                ],
+                TMC_ENTER_ONU_QTY: [
+                    MessageHandler(text_input_filter, self.tmc_enter_onu_quantity)
+                ],
+                TMC_SELECT_MEDIA: [
+                    CallbackQueryHandler(self.tmc_select_media, pattern="^(tmc_media_.*|tmc_cancel)$"),
+                    MessageHandler(text_input_filter, self.tmc_manual_model_input),
+                ],
+                TMC_ENTER_MEDIA_QTY: [
+                    MessageHandler(text_input_filter, self.tmc_enter_media_quantity)
+                ],
+                TMC_SELECT_SFP: [
+                    CallbackQueryHandler(self.tmc_select_sfp, pattern="^(tmc_sfp_.*|tmc_cancel)$"),
+                    MessageHandler(text_input_filter, self.tmc_manual_model_input),
+                ],
+                TMC_ENTER_SFP_QTY: [
+                    MessageHandler(text_input_filter, self.tmc_enter_sfp_quantity)
+                ],
+                TMC_COMMENT: [
+                    MessageHandler(text_input_filter, self.tmc_enter_comment)
+                ],
+                TMC_CONFIRM: [
+                    CallbackQueryHandler(
+                        self.tmc_confirm_operation,
+                        pattern="^(tmc_confirm|tmc_restart|tmc_cancel)$"
                     )
                 ],
                 ENTER_OPERATION_COMMENT: [

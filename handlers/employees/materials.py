@@ -50,7 +50,7 @@ async def select_employee_for_material(
     ]
 
     text = (
-        "📦 <b>Управление материалами</b>\n\n"
+        "🧵 <b>ВОЛС / ВИТ.ПАРА</b>\n\n"
         f"👤 <b>Сотрудник:</b> {employee['full_name']}\n\n"
         "📊 <b>Текущий баланс:</b>\n"
         f"  • ВОЛС: {fiber} м\n"
@@ -78,7 +78,7 @@ async def select_material_action(
         keyboard = [
             [
                 InlineKeyboardButton(
-                    f"📦 {emp['full_name']} "
+                    f"🧵 {emp['full_name']} "
                     f"(ВОЛС: {emp.get('fiber_balance', 0) or 0}м, "
                     f"ВП: {emp.get('twisted_pair_balance', 0) or 0}м)",
                     callback_data=f"mat_emp_{emp['id']}",
@@ -89,7 +89,7 @@ async def select_material_action(
         keyboard.append([InlineKeyboardButton("◀️ Назад", callback_data="back_to_manage")])
 
         await query.edit_message_text(
-            "📦 <b>Управление материалами</b>\n\nВыберите сотрудника:",
+            "🧵 <b>ВОЛС / ВИТ.ПАРА</b>\n\nВыберите сотрудника:",
             reply_markup=InlineKeyboardMarkup(keyboard),
             parse_mode="HTML",
         )
@@ -287,7 +287,7 @@ def _material_confirmation_text(employee_name: str, action: str, fiber_amount: f
     comment_text = comment or "—"
     return (
         f"👤 Сотрудник: <b>{employee_name}</b>\n"
-        f"📦 Действие: {action_word}\n\n"
+        f"🧵 Действие: {action_word}\n\n"
         f"ВОЛС: {sign}{fiber_amount} м\n"
         f"Витая пара: {sign}{twisted_amount} м\n"
         f"📝 Комментарий: {comment_text}\n\n"

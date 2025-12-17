@@ -70,7 +70,7 @@ async def check_materials_and_proceed(update: Update, context: ContextTypes.DEFA
             f"• Витая пара: {twisted_pair_meters} м\n\n"
             f"Балансы исполнителей:\n{emp_list}\n\n"
             f"Добавьте материалы через:\n"
-            f"Управление сотрудниками → Управление материалами",
+            f"Управление сотрудниками → 🧵 ВОЛС / ВИТ.ПАРА",
             parse_mode='HTML'
         )
         await query.message.reply_text(

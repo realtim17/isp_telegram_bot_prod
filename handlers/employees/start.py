@@ -79,7 +79,8 @@ async def manage_resources_start(flow: "EmployeeFlow", update: Update, context: 
     context.user_data[ENTRY_MODE_KEY] = ENTRY_MODE_RESOURCES
 
     keyboard = [
-        [InlineKeyboardButton("📦 Управление материалами", callback_data="manage_materials")],
+        [InlineKeyboardButton("🧮 Выдача ТМЦ", callback_data="manage_tmc_flow")],
+        [InlineKeyboardButton("🧵 ВОЛС / ВИТ.ПАРА", callback_data="manage_materials")],
         [InlineKeyboardButton("📡 Управление роутерами", callback_data="manage_routers")],
         [InlineKeyboardButton("🧰 SNR Оптические боксы", callback_data="manage_snr")],
         [InlineKeyboardButton("🔌 ONU абон.терминалы", callback_data="manage_onu")],
@@ -156,7 +157,7 @@ async def manage_action(flow: "EmployeeFlow", update: Update, context: ContextTy
             keyboard.append(
                 [
                     InlineKeyboardButton(
-                        f"📦 {emp['full_name']} (ВОЛС: {fiber}м, ВП: {twisted}м)",
+                        f"🧵 {emp['full_name']} (ВОЛС: {fiber}м, ВП: {twisted}м)",
                         callback_data=f"mat_emp_{emp['id']}",
                     )
                 ]
@@ -164,7 +165,7 @@ async def manage_action(flow: "EmployeeFlow", update: Update, context: ContextTy
         keyboard.append([InlineKeyboardButton("◀️ Назад", callback_data="back_to_manage")])
 
         await query.edit_message_text(
-            "📦 <b>Управление материалами</b>\n\nВыберите сотрудника:",
+            "🧵 <b>ВОЛС / ВИТ.ПАРА</b>\n\nВыберите сотрудника:",
             reply_markup=InlineKeyboardMarkup(keyboard),
             parse_mode="HTML",
         )
@@ -198,6 +199,9 @@ async def manage_action(flow: "EmployeeFlow", update: Update, context: ContextTy
             parse_mode="HTML",
         )
         return SELECT_EMPLOYEE_FOR_ROUTER
+
+    if data == "manage_tmc_flow":
+        return await flow.start_tmc_flow(update, context)
     
     if data == "manage_snr":
         employees = await run_in_thread(flow.db.get_all_employees)
