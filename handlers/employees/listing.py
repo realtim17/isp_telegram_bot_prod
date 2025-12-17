@@ -97,7 +97,7 @@ async def show_employees_list(flow: "EmployeeFlow", update: Update, context: Con
         message_lines.append(f"🔌 ONU: {onu_count} шт.")
         message_lines.append(f"🔄 Медиаконверторы: {media_count} шт.")
         if media_devices:
-            message_lines.append("   Медиаконверторы по моделям:")
+            message_lines.append("   Модели:")
             for device in media_devices:
                 message_lines.append(f"   • {device['device_name']}: {device['quantity']} шт.")
         message_lines.append(f"🧿 SFP модули: {sfp_count} шт.")
