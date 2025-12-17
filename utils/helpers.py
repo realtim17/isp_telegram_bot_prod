@@ -119,7 +119,7 @@ def _format_report_text(connection_id: int, data: Dict, employee_names: List[str
 <b> SFP модуль:</b> {sfp_info}
 <b> Доступ на роутер:</b> {router_access_status}
 <b> Договор:</b> {contract_status}
-<b>🔌 Шаг 7/17: Номер порта:</b> {port_display}
+<b>🔌 Номер порта:</b> {port_display}
 
 <b>📝 Комментарий:</b> {comment_text}
 
