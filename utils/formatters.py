@@ -47,7 +47,7 @@ class TextFormatter:
     @staticmethod
     def format_contract_status(signed: bool) -> str:
         """Форматирование статуса договора"""
-        return "✅ Подписан" if signed else "❌ Не подписан"
+        return "✅ Подтверждено" if signed else "⏭️ Пропущено"
     
     @staticmethod
     def format_router_access_status(has_access: bool) -> str:
@@ -138,4 +138,3 @@ class MessageBuilder:
 📸 <b>Фото:</b> загружено
 
 Всё верно? Подтвердите создание отчета."""
-
