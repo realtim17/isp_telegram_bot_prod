@@ -3,6 +3,7 @@
 """
 import os
 import logging
+import re
 from dotenv import load_dotenv
 
 # Загрузка переменных окружения
@@ -18,6 +19,31 @@ logging.basicConfig(
     ]
 )
 logger = logging.getLogger(__name__)
+
+
+class _TokenFilter(logging.Filter):
+    """Прячет токены Telegram Bot API в логах."""
+
+    _token_re = re.compile(r"(bot\\d+):[A-Za-z0-9_-]+")
+
+    def filter(self, record: logging.LogRecord) -> bool:  # pragma: no cover - утилитарный код
+        try:
+            message = record.getMessage()
+        except Exception:
+            return True
+        redacted = self._token_re.sub(r"\\1[REDACTED]", message)
+        if redacted != message:
+            record.msg = redacted
+            record.args = ()
+        return True
+
+
+# Маскируем токен и приглушаем HTTP-запросы httpx (в них попадал токен).
+_token_filter = _TokenFilter()
+root_logger = logging.getLogger()
+for handler in root_logger.handlers:
+    handler.addFilter(_token_filter)
+logging.getLogger("httpx").setLevel(logging.WARNING)
 
 # Константы состояний для ConversationHandler
 # Создание подключения
@@ -35,7 +61,13 @@ TELEGRAM_BOT_CONFIRM = 10
 SELECT_EMPLOYEES = 11
 SELECT_MATERIAL_PAYER = 12
 SELECT_ROUTER_PAYER = 13
+SELECT_FIBER_PAYER = 95
+SELECT_TWISTED_PAYER = 96
+SELECT_ONU_PAYER = 92
+SELECT_MEDIA_PAYER = 93
+SELECT_SFP_PAYER = 94
 CONFIRM = 14
+ENTER_COMMENT = 55
 
 # Управление сотрудниками
 MANAGE_ACTION = 15
@@ -59,20 +91,95 @@ SELECT_REPORT_EMPLOYEE = 30
 SELECT_REPORT_PERIOD = 31
 ENTER_REPORT_CUSTOM_START = 32
 ENTER_REPORT_CUSTOM_END = 33
+SELECT_EMPLOYEE_FOR_SNR = 34
+SELECT_SNR_ACTION = 35
+ENTER_SNR_NAME = 36
+ENTER_SNR_QUANTITY = 37
+CONFIRM_SNR_OPERATION = 38
+SELECT_SNR_BOX = 39
+SELECT_SNR_PAYER = 40
+MANAGE_ACCESS = 41
+ENTER_ACCESS_ID = 42
+MANAGE_ADMINS = 43
+ENTER_ADMIN_ID = 44
+SELECT_EMPLOYEE_FOR_ONU = 45
+SELECT_ONU_ACTION = 46
+ENTER_ONU_NAME = 47
+ENTER_ONU_QUANTITY = 48
+CONFIRM_ONU_OPERATION = 49
+SELECT_EMPLOYEE_FOR_MEDIA = 50
+SELECT_MEDIA_ACTION = 51
+ENTER_MEDIA_NAME = 52
+ENTER_MEDIA_QUANTITY = 53
+CONFIRM_MEDIA_OPERATION = 54
+ENTER_COMMENT = 55
+ENTER_OPERATION_COMMENT = 56
+ENTER_SNR_QUANTITY_CONNECTION = 57
+SELECT_EMPLOYEE_FOR_SFP = 58
+SELECT_SFP_ACTION = 59
+ENTER_SFP_NAME = 60
+ENTER_SFP_QUANTITY = 61
+CONFIRM_SFP_OPERATION = 62
+
+# Пошаговая выдача ТМЦ
+TMC_SELECT_EMPLOYEE = 63
+TMC_ENTER_FIBER = 64
+TMC_ENTER_TWISTED = 65
+TMC_SELECT_ROUTER = 66
+TMC_ENTER_ROUTER_QTY = 67
+TMC_SELECT_SNR = 68
+TMC_ENTER_SNR_QTY = 69
+TMC_SELECT_ONU = 70
+TMC_ENTER_ONU_QTY = 71
+TMC_SELECT_MEDIA = 72
+TMC_ENTER_MEDIA_QTY = 73
+TMC_SELECT_SFP = 74
+TMC_ENTER_SFP_QTY = 75
+TMC_COMMENT = 76
+TMC_CONFIRM = 77
+
+# Магистральная линия
+MAG_TYPE = 80
+MAG_UPLOAD_PHOTOS = 81
+MAG_ENTER_ADDRESS = 82
+MAG_ENTER_FIBER = 83
+MAG_ENTER_HOOKS = 84
+MAG_ENTER_ORK = 85
+MAG_ENTER_MUFTS = 86
+MAG_SELECT_SFP = 87
+MAG_ENTER_SFP_QTY = 88
+MAG_COMMENT = 89
+MAG_SELECT_EMPLOYEES = 90
+MAG_CONFIRM = 91
 
 # Типы подключений
 CONNECTION_TYPES = {
     'mkd': 'МКД',
     'chs': 'ЧС',
-    'legal': 'Юр / Гос'
+    'legal': 'Юр / Гос',
+    'magistral': 'Магистральная линия',
+    'additional': 'Дополнительная точка'
 }
 
 
 # Токен бота
 TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
 
-# Загрузка ID администраторов
+# Загрузка ID администраторов (суперадминов)
 ADMIN_IDS = [int(id.strip()) for id in os.getenv('ADMIN_USER_IDS', '').split(',') if id.strip()]
+
+# Список пользователей с доступом к боту
+ALLOWED_USER_IDS = {
+    int(user_id.strip()) for user_id in os.getenv('ALLOWED_USER_IDS', '').split(',') if user_id.strip()
+}
+
+ACCESS_DENIED_MESSAGE = (
+    os.getenv(
+        'ACCESS_DENIED_MESSAGE',
+        '⛔ Доступ к боту ограничен. Обратитесь к администратору.'
+    ).strip()
+    or '⛔ Доступ к боту ограничен. Обратитесь к администратору.'
+)
 
 # ID канала для отправки отчетов (опционально)
 REPORTS_CHANNEL_ID = os.getenv('REPORTS_CHANNEL_ID', '').strip()
@@ -88,5 +195,5 @@ else:
 
 
 def is_admin(user_id: int) -> bool:
-    """Проверка, является ли пользователь администратором"""
+    """Legacy: проверка только по ADMIN_USER_IDS из .env"""
     return user_id in ADMIN_IDS
