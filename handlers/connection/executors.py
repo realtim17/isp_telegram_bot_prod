@@ -19,6 +19,11 @@ async def start_employee_selection(
     query = update.callback_query
     message = update.effective_message
 
+    step_title = context.user_data.get('employee_step_label')
+    if not step_title:
+        step_title = "👥 <b>Шаг 17/17: Выбор исполнителей</b>"
+    target_state = context.user_data.get('employee_selection_state', SELECT_EMPLOYEES)
+
     employees = await run_in_thread(db.get_all_employees) or []
     if not employees:
         if query:
@@ -46,13 +51,13 @@ async def start_employee_selection(
     ]
     keyboard.append([InlineKeyboardButton("✅ Готово", callback_data='employees_done')])
     reply_markup = build_inline_keyboard(keyboard)
-    
+
     message_text = (
-        "👥 <b>Шаг 16/16: Выбор исполнителей</b>\n\n"
+        f"{step_title}\n\n"
         "Выберите сотрудников, которые участвовали в подключении:\n"
         "(можно выбрать нескольких)"
     )
-    
+
     if query:
         await query.edit_message_text(
             message_text,
@@ -64,12 +69,12 @@ async def start_employee_selection(
         )
     else:
         await message.reply_text(
-            message_text,
-            parse_mode='HTML',
-            reply_markup=reply_markup
-        )
-    
-    return SELECT_EMPLOYEES
+        message_text,
+        parse_mode='HTML',
+        reply_markup=reply_markup
+    )
+
+    return target_state
 
 
 async def select_employee_toggle(update: Update, context: ContextTypes.DEFAULT_TYPE, db) -> int:
@@ -82,7 +87,7 @@ async def select_employee_toggle(update: Update, context: ContextTypes.DEFAULT_T
         
         if not selected:
             await query.answer("⚠️ Выберите хотя бы одного сотрудника!", show_alert=True)
-            return SELECT_EMPLOYEES
+            return context.user_data.get('employee_selection_state', SELECT_EMPLOYEES)
         
         from handlers.connection.validation import check_materials_and_proceed
         return await check_materials_and_proceed(update, context, db)
@@ -118,4 +123,4 @@ async def select_employee_toggle(update: Update, context: ContextTypes.DEFAULT_T
     except Exception:
         pass
     
-    return SELECT_EMPLOYEES
+    return context.user_data.get('employee_selection_state', SELECT_EMPLOYEES)

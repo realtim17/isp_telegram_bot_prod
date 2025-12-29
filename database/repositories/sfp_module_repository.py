@@ -1,10 +1,11 @@
 """
-Репозиторий для учета SFP модулей у сотрудников.
+Репозиторий для управления SFP модулями сотрудников
 """
 from __future__ import annotations
 
 import logging
-from typing import List, Dict, Optional
+import sqlite3
+from typing import Dict, List, Optional
 
 from database.base_repository import BaseRepository
 
@@ -12,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 
 class SFPModuleRepository(BaseRepository):
-    """Работа с таблицей employee_sfp_modules."""
+    """Работа с таблицей employee_sfp_modules"""
 
     def add_module(
         self,
@@ -20,20 +21,22 @@ class SFPModuleRepository(BaseRepository):
         module_name: str,
         quantity: int,
         created_by: Optional[int] = None,
-        comment: str = ""
+        connection: Optional[sqlite3.Connection] = None,
+        comment: str = "",
     ) -> bool:
+        conn = connection or self.get_connection()
+        own_connection = connection is None
         try:
-            conn = self.get_connection()
             cursor = conn.cursor()
             cursor.execute(
                 """
-                SELECT id, quantity
-                FROM employee_sfp_modules
+                SELECT id, quantity FROM employee_sfp_modules
                 WHERE employee_id = ? AND module_name = ?
                 """,
                 (employee_id, module_name),
             )
             existing = cursor.fetchone()
+
             if existing:
                 new_quantity = existing["quantity"] + quantity
                 cursor.execute(
@@ -43,18 +46,14 @@ class SFPModuleRepository(BaseRepository):
             else:
                 new_quantity = quantity
                 cursor.execute(
-                    """
-                    INSERT INTO employee_sfp_modules (employee_id, module_name, quantity)
-                    VALUES (?, ?, ?)
-                    """,
+                    "INSERT INTO employee_sfp_modules (employee_id, module_name, quantity) VALUES (?, ?, ?)",
                     (employee_id, module_name, quantity),
                 )
-            conn.commit()
-            conn.close()
 
             from database.repositories.material_repository import MaterialRepository
 
-            MaterialRepository(self.db_path).log_movement(
+            material_repo = MaterialRepository(self.db_path)
+            if not material_repo.log_movement(
                 employee_id,
                 "add",
                 "sfp_module",
@@ -63,11 +62,22 @@ class SFPModuleRepository(BaseRepository):
                 new_quantity,
                 None,
                 created_by,
-            )
+                comment=comment,
+                cursor=cursor,
+            ):
+                raise RuntimeError("Не удалось записать лог движения SFP модулей")
+
+            if own_connection:
+                conn.commit()
             return True
         except Exception as exc:
-            logger.error("Ошибка при добавлении SFP модуля: %s", exc)
+            if own_connection:
+                conn.rollback()
+            logger.error("Ошибка при добавлении SFP модулей: %s", exc)
             return False
+        finally:
+            if own_connection:
+                conn.close()
 
     def deduct_module(
         self,
@@ -76,23 +86,24 @@ class SFPModuleRepository(BaseRepository):
         quantity: int = 1,
         connection_id: Optional[int] = None,
         created_by: Optional[int] = None,
-        comment: str = ""
+        connection: Optional[sqlite3.Connection] = None,
+        comment: str = "",
     ) -> bool:
+        conn = connection or self.get_connection()
+        own_connection = connection is None
         try:
-            conn = self.get_connection()
             cursor = conn.cursor()
             cursor.execute(
                 """
-                SELECT id, quantity
-                FROM employee_sfp_modules
+                SELECT id, quantity FROM employee_sfp_modules
                 WHERE employee_id = ? AND module_name = ?
                 """,
                 (employee_id, module_name),
             )
             existing = cursor.fetchone()
             if not existing or existing["quantity"] < quantity:
-                conn.close()
-                logger.warning("Недостаточно SFP модулей '%s' у сотрудника %s", module_name, employee_id)
+                if own_connection:
+                    conn.close()
                 return False
 
             new_quantity = existing["quantity"] - quantity
@@ -103,12 +114,11 @@ class SFPModuleRepository(BaseRepository):
                     "UPDATE employee_sfp_modules SET quantity = ? WHERE id = ?",
                     (new_quantity, existing["id"]),
                 )
-            conn.commit()
-            conn.close()
 
             from database.repositories.material_repository import MaterialRepository
 
-            MaterialRepository(self.db_path).log_movement(
+            material_repo = MaterialRepository(self.db_path)
+            if not material_repo.log_movement(
                 employee_id,
                 "deduct",
                 "sfp_module",
@@ -117,11 +127,22 @@ class SFPModuleRepository(BaseRepository):
                 new_quantity,
                 connection_id,
                 created_by,
-            )
+                comment=comment,
+                cursor=cursor,
+            ):
+                raise RuntimeError("Не удалось записать лог движения SFP модулей")
+
+            if own_connection:
+                conn.commit()
             return True
         except Exception as exc:
-            logger.error("Ошибка при списании SFP модуля: %s", exc)
+            if own_connection:
+                conn.rollback()
+            logger.error("Ошибка при списании SFP модулей: %s", exc)
             return False
+        finally:
+            if own_connection:
+                conn.close()
 
     def get_modules(self, employee_id: int) -> List[Dict]:
         return (
@@ -141,8 +162,7 @@ class SFPModuleRepository(BaseRepository):
     def get_quantity(self, employee_id: int, module_name: str) -> int:
         result = self.execute_query(
             """
-            SELECT quantity
-            FROM employee_sfp_modules
+            SELECT quantity FROM employee_sfp_modules
             WHERE employee_id = ? AND module_name = ?
             """,
             (employee_id, module_name),
@@ -151,7 +171,7 @@ class SFPModuleRepository(BaseRepository):
         return result["quantity"] if result else 0
 
     def get_all_names(self) -> List[str]:
-        rows = self.execute_query(
+        results = self.execute_query(
             """
             SELECT DISTINCT module_name
             FROM employee_sfp_modules
@@ -160,4 +180,4 @@ class SFPModuleRepository(BaseRepository):
             """,
             fetch_all=True,
         ) or []
-        return [row["module_name"] for row in rows]
+        return [row["module_name"] for row in results]
