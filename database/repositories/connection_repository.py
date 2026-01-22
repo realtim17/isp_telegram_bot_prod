@@ -179,17 +179,6 @@ class ConnectionRepository(BaseRepository):
             total_onu_quantity = 0.0
             total_media_quantity = 0.0
             total_sfp_quantity = 0.0
-            total_hooks_all = 0.0
-            total_ork_all = 0.0
-            total_mufta_all = 0.0
-            total_employee_hooks = 0.0
-            total_employee_ork = 0.0
-            total_employee_mufta = 0.0
-            total_router_quantity = 0.0
-            total_snr_quantity = 0.0
-            total_onu_quantity = 0.0
-            total_media_quantity = 0.0
-            total_sfp_quantity = 0.0
             
             def _format_items(items: Dict[str, float]) -> str:
                 if not items:
@@ -383,6 +372,17 @@ class ConnectionRepository(BaseRepository):
             total_twisted_share = 0.0
             total_fiber_all = 0.0
             total_twisted_all = 0.0
+            total_hooks_all = 0.0
+            total_ork_all = 0.0
+            total_mufta_all = 0.0
+            total_employee_hooks = 0.0
+            total_employee_ork = 0.0
+            total_employee_mufta = 0.0
+            total_router_quantity = 0.0
+            total_snr_quantity = 0.0
+            total_onu_quantity = 0.0
+            total_media_quantity = 0.0
+            total_sfp_quantity = 0.0
 
             def _format_items(items: Dict[str, float]) -> str:
                 if not items:
