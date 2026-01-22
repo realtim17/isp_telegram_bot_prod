@@ -56,13 +56,13 @@ def main():
 
 **Пример использования:**
 ```python
-from config import SELECT_CONNECTION_TYPE, CONNECTION_TYPES, is_admin
+from config import SELECT_CONNECTION_TYPE, CONNECTION_TYPES
+from utils.admins import AdminManager
 
-# Проверка админ-прав
-if is_admin(user_id):
+admin_manager = AdminManager(db, base_admin_ids=[12345])
+if admin_manager.is_admin(user_id):
     # ...
-    
-# Получение названия типа
+
 type_name = CONNECTION_TYPES.get('mkd')  # 'МКД'
 ```
 
@@ -648,4 +648,3 @@ User → bot.py → handlers/employees.py
 - ✅ Масштабируемость
 
 Следование этому руководству поможет поддерживать высокое качество кода и упростит дальнейшую разработку.
-
