@@ -237,9 +237,6 @@ class ReportGenerator:
         
         logger.info(f"Отчет создан: {filename}")
         return filename
-<<<<<<< Updated upstream
-=======
-
     @staticmethod
     def generate_global_report(
         connections: List[Dict],
@@ -542,7 +539,6 @@ class ReportGenerator:
         wb.save(file_name)
         logger.info("Общий отчет создан: %s", file_name)
         return file_name
->>>>>>> Stashed changes
     
     @staticmethod
     def _add_movements_sheet(wb: Workbook, employee_name: str, period_name: str, movements: List[Dict]):
@@ -582,18 +578,18 @@ class ReportGenerator:
         deduct_fill = PatternFill(start_color="FCE4D6", end_color="FCE4D6", fill_type="solid")
         
         # Заголовок
-        ws.merge_cells('A1:G1')
+        ws.merge_cells('A1:H1')
         ws['A1'] = f"Движение материалов и роутеров"
         ws['A1'].font = title_font
         ws['A1'].alignment = title_alignment
         
         # Информация
-        ws.merge_cells('A2:G2')
+        ws.merge_cells('A2:H2')
         ws['A2'] = f"Исполнитель: {employee_name}"
         ws['A2'].font = Font(name='Arial', size=11, bold=True)
         ws['A2'].alignment = cell_alignment
         
-        ws.merge_cells('A3:G3')
+        ws.merge_cells('A3:H3')
         ws['A3'] = f"Период: {period_name}"
         ws['A3'].font = Font(name='Arial', size=11)
         ws['A3'].alignment = cell_alignment
@@ -606,7 +602,8 @@ class ReportGenerator:
             'Название',
             'Количество',
             'Остаток',
-            'Связь с подключением'
+            'Связь с подключением',
+            'Комментарий',
         ]
         
         ws.row_dimensions[5].height = 30
@@ -626,6 +623,7 @@ class ReportGenerator:
         ws.column_dimensions['E'].width = 12  # Количество
         ws.column_dimensions['F'].width = 12  # Остаток
         ws.column_dimensions['G'].width = 20  # Связь
+        ws.column_dimensions['H'].width = 28  # Комментарий
         
         # Данные движений
         current_row = 6
@@ -634,8 +632,10 @@ class ReportGenerator:
             try:
                 created_at = datetime.fromisoformat(mov['created_at'])
                 date_str = created_at.strftime('%d.%m.%Y %H:%M')
-            except:
-                date_str = mov['created_at']
+            except (ValueError, TypeError) as err:
+                logger.warning("Некорректная дата движения (employee %s): %s", mov.get('employee_id'), err)
+                date_value = mov.get('created_at')
+                date_str = str(date_value) if date_value is not None else "-"
             
             # Операция
             operation = "Добавление" if mov['operation_type'] == 'add' else "Списание"
@@ -644,12 +644,16 @@ class ReportGenerator:
             type_map = {
                 'fiber': 'ВОЛС',
                 'twisted_pair': 'Витая пара',
-                'router': 'Роутер'
+                'router': 'Роутер',
+                'snr_box': 'SNR бокс',
+                'onu': 'ONU',
+                'media_converter': 'Медиаконвертор',
+                'sfp_module': 'SFP модуль'
             }
             item_type = type_map.get(mov['item_type'], mov['item_type'])
             
             # Количество
-            if mov['item_type'] == 'router':
+            if mov['item_type'] in ('router', 'snr_box', 'onu', 'media_converter', 'sfp_module'):
                 quantity_str = f"{int(mov['quantity'])} шт."
                 balance_str = f"{int(mov['balance_after'])} шт."
             else:
@@ -666,7 +670,8 @@ class ReportGenerator:
                 mov['item_name'],
                 quantity_str,
                 balance_str,
-                conn_link
+                conn_link,
+                mov.get('comment') or "-",
             ]
             
             # Определяем цвет фона

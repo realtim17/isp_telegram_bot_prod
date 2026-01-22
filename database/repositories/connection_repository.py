@@ -222,9 +222,6 @@ class ConnectionRepository(BaseRepository):
         except Exception as e:
             logger.error(f"Ошибка при получении отчета: {e}")
             return [], {}
-<<<<<<< Updated upstream
-=======
-
     def get_global_report(
         self,
         days: Optional[int] = None,
@@ -428,7 +425,6 @@ class ConnectionRepository(BaseRepository):
         except Exception as exc:
             logger.error("Ошибка при получении общего отчета: %s", exc)
             return [], {"total_connections": 0, "total_fiber_meters": 0, "total_twisted_pair_meters": 0}
->>>>>>> Stashed changes
     
     def get_all_count(self) -> int:
         """Получить общее количество подключений"""
