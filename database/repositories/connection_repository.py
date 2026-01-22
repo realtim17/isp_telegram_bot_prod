@@ -179,6 +179,17 @@ class ConnectionRepository(BaseRepository):
             total_onu_quantity = 0.0
             total_media_quantity = 0.0
             total_sfp_quantity = 0.0
+            total_hooks_all = 0.0
+            total_ork_all = 0.0
+            total_mufta_all = 0.0
+            total_employee_hooks = 0.0
+            total_employee_ork = 0.0
+            total_employee_mufta = 0.0
+            total_router_quantity = 0.0
+            total_snr_quantity = 0.0
+            total_onu_quantity = 0.0
+            total_media_quantity = 0.0
+            total_sfp_quantity = 0.0
             
             def _format_items(items: Dict[str, float]) -> str:
                 if not items:
@@ -300,6 +311,10 @@ class ConnectionRepository(BaseRepository):
                     c.connection_type,
                     c.address,
                     c.router_model,
+                    c.router_quantity,
+                    c.contract_signed,
+                    c.router_access,
+                    c.telegram_bot_connected,
                     c.snr_box_model,
                     c.snr_box_quantity,
                     c.comment,
@@ -384,24 +399,55 @@ class ConnectionRepository(BaseRepository):
 
                 conn_dict["employee_fiber_meters"] = round(conn_dict["fiber_meters"] / emp_count, 2)
                 conn_dict["employee_twisted_pair_meters"] = round(conn_dict["twisted_pair_meters"] / emp_count, 2)
-                conn_dict["employee_hooks"] = round((conn_dict.get("hooks_quantity") or 0) / emp_count, 2)
-                conn_dict["employee_ork"] = round((conn_dict.get("ork_quantity") or 0) / emp_count, 2)
-                conn_dict["employee_mufta"] = round((conn_dict.get("mufta_quantity") or 0) / emp_count, 2)
+                hooks_total = float(conn_dict.get("hooks_quantity") or 0)
+                ork_total = float(conn_dict.get("ork_quantity") or 0)
+                mufta_total = float(conn_dict.get("mufta_quantity") or 0)
+                router_raw_qty = float(conn_dict.get("router_quantity") or 0)
+
+                conn_dict["employee_hooks"] = round(hooks_total / emp_count, 2) if hooks_total else 0.0
+                conn_dict["employee_ork"] = round(ork_total / emp_count, 2) if ork_total else 0.0
+                conn_dict["employee_mufta"] = round(mufta_total / emp_count, 2) if mufta_total else 0.0
                 conn_dict["all_employees"] = employees_map.get(conn_dict["id"], [])
                 conn_dict["total_fiber_meters"] = conn_dict["fiber_meters"]
                 conn_dict["total_twisted_pair_meters"] = conn_dict["twisted_pair_meters"]
 
                 mov = movement_map.get(conn_dict["id"], {})
-                conn_dict["snr_spent"] = _format_items(mov.get("snr_box", {})) if mov.get("snr_box") else (conn_dict.get("snr_box_model") or "-")
-                conn_dict["onu_spent"] = _format_items(mov.get("onu", {}))
-                conn_dict["media_spent"] = _format_items(mov.get("media_converter", {}))
-                conn_dict["sfp_spent"] = _format_items(mov.get("sfp_module", {}))
+                snr_mov = mov.get("snr_box", {})
+                onu_mov = mov.get("onu", {})
+                media_mov = mov.get("media_converter", {})
+                sfp_mov = mov.get("sfp_module", {})
+
+                conn_dict["snr_spent"] = _format_items(snr_mov) if snr_mov else (conn_dict.get("snr_box_model") or "-")
+                conn_dict["onu_spent"] = _format_items(onu_mov)
+                conn_dict["media_spent"] = _format_items(media_mov)
+                conn_dict["sfp_spent"] = _format_items(sfp_mov)
+
+                snr_qty = sum(float(qty or 0) for qty in snr_mov.values()) if snr_mov else float(conn_dict.get("snr_box_quantity") or 0)
+                onu_qty = sum(float(qty or 0) for qty in onu_mov.values()) if onu_mov else float(conn_dict.get("onu_quantity") or 0)
+                media_qty = sum(float(qty or 0) for qty in media_mov.values()) if media_mov else float(conn_dict.get("media_converter_quantity") or 0)
+                sfp_qty = sum(float(qty or 0) for qty in sfp_mov.values()) if sfp_mov else float(conn_dict.get("sfp_module_quantity") or 0)
+                has_router = bool(conn_dict.get("router_model")) and conn_dict["router_model"] not in ("-", None)
+                router_qty = router_raw_qty if has_router and router_raw_qty else 0.0
+                conn_dict["router_quantity"] = router_qty
 
                 connections.append(conn_dict)
                 total_fiber_share += conn_dict["employee_fiber_meters"]
                 total_twisted_share += conn_dict["employee_twisted_pair_meters"]
-                total_fiber_all += conn_dict["fiber_meters"]
-                total_twisted_all += conn_dict["twisted_pair_meters"]
+                total_fiber_all += conn_dict["total_fiber_meters"]
+                total_twisted_all += conn_dict["total_twisted_pair_meters"]
+                total_hooks_all += hooks_total
+                total_ork_all += ork_total
+                total_mufta_all += mufta_total
+                total_employee_hooks += conn_dict["employee_hooks"]
+                total_employee_ork += conn_dict["employee_ork"]
+                total_employee_mufta += conn_dict["employee_mufta"]
+                total_router_quantity += router_qty
+                total_snr_quantity += snr_qty
+                total_onu_quantity += onu_qty
+                total_media_quantity += media_qty
+                total_sfp_quantity += sfp_qty
+
+            conn.close()
 
             stats = {
                 "total_connections": len(connections),
@@ -409,6 +455,17 @@ class ConnectionRepository(BaseRepository):
                 "total_twisted_pair_meters": round(total_twisted_share, 2),
                 "total_connection_fiber_meters": round(total_fiber_all, 2),
                 "total_connection_twisted_pair_meters": round(total_twisted_all, 2),
+                "total_hooks_quantity": round(total_hooks_all, 2),
+                "total_ork_quantity": round(total_ork_all, 2),
+                "total_mufta_quantity": round(total_mufta_all, 2),
+                "total_employee_hooks": round(total_employee_hooks, 2),
+                "total_employee_ork": round(total_employee_ork, 2),
+                "total_employee_mufta": round(total_employee_mufta, 2),
+                "total_router_quantity": round(total_router_quantity, 2),
+                "total_snr_quantity": round(total_snr_quantity, 2),
+                "total_onu_quantity": round(total_onu_quantity, 2),
+                "total_media_quantity": round(total_media_quantity, 2),
+                "total_sfp_quantity": round(total_sfp_quantity, 2),
             }
 
             return connections, stats
