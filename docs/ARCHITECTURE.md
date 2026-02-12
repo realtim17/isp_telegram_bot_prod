@@ -24,7 +24,7 @@ Telegram-бот для автоматизации отчетности по по
                │
 ┌──────────────▼──────────────────────────┐
 │          Business Logic Layer           │
-│         (services/, utils/)             │
+│   (handlers/, utils/, report_generator) │
 │  - Форматирование данных                │
 │  - Валидация бизнес-правил              │
 │  - Генерация отчетов                    │
@@ -74,7 +74,11 @@ isp_telegram_bot/
 │   │   ├── validation.py      # Проверка материалов/роутеров
 │   │   ├── confirmation.py    # Подтверждение данных
 │   │   └── constants.py       # Константы модуля
-│   ├── employees.py           # Управление сотрудниками
+│   ├── employees/             # Управление сотрудниками
+│   │   ├── __init__.py
+│   │   ├── flow.py            # Координатор EmployeeFlow
+│   │   ├── start.py           # Главное меню раздела
+│   │   └── ...                # Подмодули устройств и ТМЦ
 │   └── reports.py             # Генерация отчетов
 │
 ├── utils/                      # Вспомогательные модули
@@ -90,7 +94,7 @@ isp_telegram_bot/
     ├── ARCHITECTURE.md         # Архитектура (этот файл)
     ├── MODULE_GUIDE.md         # Руководство по модулям
     ├── REFACTORING_PLAN.md     # План рефакторинга
-    └── development/            # Документация разработки
+    └── README.md               # Индекс документации
 ```
 
 ## Основные компоненты
@@ -128,11 +132,11 @@ isp_telegram_bot/
 - `confirmation.py` - Подтверждение и сохранение
 - `constants.py` - Константы и текстовые шаблоны
 
-#### handlers/employees.py
-Управление сотрудниками:
-- Добавление/удаление сотрудников
-- Управление материалами (ВОЛС, витая пара)
-- Управление роутерами
+#### handlers/employees/
+Управление сотрудниками и оборудованием:
+- `flow.py` — координация состояний и роутинг между подмодулями
+- Подмодули `materials.py`, `routers.py`, `snr_boxes.py`, `onu.py`, `media_converters.py`, `sfp_modules.py`
+- Подмодуль `tmc_flow.py` для пошаговой выдачи ТМЦ
 
 #### handlers/reports.py
 Генерация отчетов:
@@ -358,13 +362,13 @@ CREATE TABLE material_movement_log (
 ## Deployment
 
 ### Требования
-- Python 3.9+
+- Python 3.11+
 - SQLite 3
 - 100MB диск
 - 256MB RAM
 
 ### Конфигурация
-См. `docs/setup/SETUP_GUIDE.md`
+См. `docs/QUICK_START.md`
 
 ### Мониторинг
 - Логи: `bot.log`

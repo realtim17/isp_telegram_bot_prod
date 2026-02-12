@@ -7,6 +7,8 @@ __pycache__/
 .Python
 venv/
 ENV/
+.venv/
+.venv311/
 *.xlsx
 photos/
 bot.log

@@ -28,7 +28,7 @@ def main():
     # Регистрация обработчиков
     application.add_handler(connection_conv)
     application.add_handler(report_conv)
-    application.add_handler(manage_conv)
+    application.add_handler(employee_conv)
     
     # Запуск
     application.run_polling()
@@ -90,12 +90,12 @@ type_name = CONNECTION_TYPES.get('mkd')  # 'МКД'
 
 ### handlers/connection/
 
-**Назначение:** Модуль создания подключений (рефакторинг из 1163 строк)
+**Назначение:** Модуль создания подключений
 
 #### Структура:
 ```
 handlers/connection/
-├── __init__.py           # Экспорт connection_conv
+├── __init__.py           # Экспорт build_connection_conversation
 ├── conversation.py       # ConversationHandler
 ├── steps.py              # Обработчики шагов
 ├── validation.py         # Проверка материалов/роутеров
@@ -232,26 +232,24 @@ async def check_materials_and_proceed(update, context, db):
 
 ---
 
-### handlers/employees.py
-**Назначение:** Управление сотрудниками
+### handlers/employees/
+**Назначение:** Управление сотрудниками, доступом и ТМЦ
 
 **Функционал:**
 1. **Управление сотрудниками**
-   - Добавление: `add_employee_name()`
-   - Удаление: `delete_employee_confirm()`
-   - Список: `show_employees_list()`
+   - Координатор: `EmployeeFlow` (`flow.py`)
+   - Добавление/удаление сотрудников: `mutations.py`
+   - Список сотрудников: `listing.py`
 
-2. **Управление материалами**
-   - Выбор сотрудника: `select_employee_for_material()`
-   - Выбор действия: `select_material_action()`
-   - Ввод ВОЛС: `enter_fiber_amount()`
-   - Ввод витой пары: `enter_twisted_amount()`
+2. **Управление материалами и оборудованием**
+   - Материалы: `materials.py`
+   - Роутеры: `routers.py`
+   - SNR/ONU/Media/SFP: `snr_boxes.py`, `onu.py`, `media_converters.py`, `sfp_modules.py`
 
-3. **Управление роутерами**
-   - Выбор сотрудника: `select_employee_for_router()`
-   - Выбор действия: `select_router_action()`
-   - Ввод модели: `enter_router_name()`
-   - Ввод количества: `enter_router_quantity()`
+3. **Администрирование и доступ**
+   - Управление доступом: `access_control.py`
+   - Управление администраторами: `admin_control.py`
+   - Пошаговая выдача ТМЦ: `tmc_flow.py`
 
 **Зависимости:**
 - `Database` для CRUD операций
@@ -574,7 +572,7 @@ User → bot.py → handlers/connection/conversation.py
 
 #### Управление материалами
 ```
-User → bot.py → handlers/employees.py
+User → bot.py → handlers/employees/flow.py
                         ↓
                 utils/validators.py
                         ↓

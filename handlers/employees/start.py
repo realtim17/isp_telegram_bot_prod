@@ -105,7 +105,9 @@ async def manage_action(flow: "EmployeeFlow", update: Update, context: ContextTy
         keyboard = []
         for emp in employees:
             fiber = emp.get("fiber_balance", 0) or 0
-            twisted = emp.get("twisted_pair_balance", 0) or 0
+            twisted_external = emp.get("twisted_pair_external_balance", 0) or 0
+            twisted_internal = emp.get("twisted_pair_internal_balance", 0) or 0
+            twisted = twisted_external + twisted_internal
             keyboard.append(
                 [
                     InlineKeyboardButton(

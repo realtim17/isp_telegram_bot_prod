@@ -111,6 +111,35 @@ async def _generate_report_for_period(
         )
         
         with open(filename, 'rb') as file:
+<<<<<<< Updated upstream
+=======
+            caption = (
+                f"📊 Отчет по сотруднику: <b>{employee['full_name']}</b>\n"
+                f"Период: {period_name}\n"
+                f"Подключений: {stats.get('total_connections', 0)}\n"
+                f"ВОЛС всего: {stats.get('total_connection_fiber_meters', stats.get('total_fiber_meters', 0))} м\n"
+                f"ВОЛС (на исполнителя): {stats.get('total_fiber_meters', 0)} м\n"
+                f"Витая пара всего: {stats.get('total_connection_twisted_pair_meters', stats.get('total_twisted_pair_meters', 0))} м\n"
+                f"Витая пара (на исполнителя): {stats.get('total_twisted_pair_meters', 0)} м\n"
+                f"Внеш. витая пара всего: {stats.get('total_connection_twisted_pair_external_meters', stats.get('total_twisted_pair_external_meters', 0))} м\n"
+                f"Внеш. витая пара (на исполнителя): {stats.get('total_twisted_pair_external_meters', 0)} м\n"
+                f"Внут. витая пара всего: {stats.get('total_connection_twisted_pair_internal_meters', stats.get('total_twisted_pair_internal_meters', 0))} м\n"
+                f"Внут. витая пара (на исполнителя): {stats.get('total_twisted_pair_internal_meters', 0)} м"
+            ) if report_mode == REPORT_MODE_EMPLOYEE else (
+                f"📊 Общий отчет по подключениям\n"
+                f"Период: {period_name}\n"
+                f"Подключений: {stats.get('total_connections', 0)}\n"
+                f"ВОЛС всего: {stats.get('total_connection_fiber_meters', stats.get('total_fiber_meters', 0))} м\n"
+                f"ВОЛС (на исполнителя): {stats.get('total_fiber_meters', 0)} м\n"
+                f"Витая пара всего: {stats.get('total_connection_twisted_pair_meters', stats.get('total_twisted_pair_meters', 0))} м\n"
+                f"Витая пара (на исполнителя): {stats.get('total_twisted_pair_meters', 0)} м\n"
+                f"Внеш. витая пара всего: {stats.get('total_connection_twisted_pair_external_meters', stats.get('total_twisted_pair_external_meters', 0))} м\n"
+                f"Внеш. витая пара (на исполнителя): {stats.get('total_twisted_pair_external_meters', 0)} м\n"
+                f"Внут. витая пара всего: {stats.get('total_connection_twisted_pair_internal_meters', stats.get('total_twisted_pair_internal_meters', 0))} м\n"
+                f"Внут. витая пара (на исполнителя): {stats.get('total_twisted_pair_internal_meters', 0)} м"
+            )
+
+>>>>>>> Stashed changes
             await target_message.reply_document(
                 document=file,
                 filename=filename,

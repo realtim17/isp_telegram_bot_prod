@@ -18,6 +18,17 @@ class TestDatabase(unittest.TestCase):
         """Очистка после тестов - удаление тестовой БД"""
         if os.path.exists(self.test_db_path):
             os.remove(self.test_db_path)
+
+    def _add_materials(self, employee_ids, fiber=1000.0, twisted=1000.0):
+        """Подготовка тестовых балансов, т.к. create_connection списывает материалы."""
+        for employee_id in employee_ids:
+            self.db.add_material_to_employee(
+                employee_id=employee_id,
+                fiber_meters=fiber,
+                twisted_pair_meters=twisted,
+                created_by=0,
+                comment="test setup",
+            )
     
     # ==================== ТЕСТЫ СОТРУДНИКОВ ====================
     
@@ -86,9 +97,12 @@ class TestDatabase(unittest.TestCase):
         emp2 = self.db.add_employee("Монтажник 2")
         
         # Создаем подключение
+        self._add_materials([emp1, emp2])
         conn_id = self.db.create_connection(
+            connection_type="mkd",
             address="ул. Тестовая, д. 1",
             router_model="Test Router",
+            snr_box_model="-",
             port="8",
             fiber_meters=100.0,
             twisted_pair_meters=20.0,
@@ -106,9 +120,12 @@ class TestDatabase(unittest.TestCase):
         emp1 = self.db.add_employee("Монтажник А")
         emp2 = self.db.add_employee("Монтажник Б")
         
+        self._add_materials([emp1, emp2])
         conn_id = self.db.create_connection(
+            connection_type="mkd",
             address="ул. Ленина, д. 10",
             router_model="Keenetic",
+            snr_box_model="-",
             port="5",
             fiber_meters=150.0,
             twisted_pair_meters=25.0,
@@ -143,9 +160,12 @@ class TestDatabase(unittest.TestCase):
         """Тест отчета с одним подключением (один исполнитель)"""
         emp_id = self.db.add_employee("Единственный Исполнитель")
         
+        self._add_materials([emp_id])
         conn_id = self.db.create_connection(
+            connection_type="mkd",
             address="ул. Мира, д. 5",
             router_model="TP-Link",
+            snr_box_model="-",
             port="3",
             fiber_meters=100.0,
             twisted_pair_meters=15.0,
@@ -160,6 +180,8 @@ class TestDatabase(unittest.TestCase):
         self.assertEqual(stats['total_connections'], 1)
         self.assertEqual(stats['total_fiber_meters'], 100.0)
         self.assertEqual(stats['total_twisted_pair_meters'], 15.0)
+        self.assertEqual(stats['total_twisted_pair_external_meters'], 7.5)
+        self.assertEqual(stats['total_twisted_pair_internal_meters'], 7.5)
     
     def test_get_employee_report_shared(self):
         """Тест отчета с разделенным подключением (два исполнителя)"""
@@ -167,9 +189,12 @@ class TestDatabase(unittest.TestCase):
         emp2 = self.db.add_employee("Исполнитель 2")
         
         # Создаем подключение с двумя исполнителями
+        self._add_materials([emp1, emp2])
         self.db.create_connection(
+            connection_type="mkd",
             address="ул. Пушкина, д. 3",
             router_model="Mikrotik",
+            snr_box_model="-",
             port="12",
             fiber_meters=200.0,
             twisted_pair_meters=30.0,
@@ -184,6 +209,8 @@ class TestDatabase(unittest.TestCase):
         self.assertEqual(len(connections), 1)
         self.assertEqual(stats['total_fiber_meters'], 100.0)  # 200 / 2
         self.assertEqual(stats['total_twisted_pair_meters'], 15.0)  # 30 / 2
+        self.assertEqual(stats['total_twisted_pair_external_meters'], 7.5)
+        self.assertEqual(stats['total_twisted_pair_internal_meters'], 7.5)
     
     def test_get_employee_report_multiple(self):
         """Тест отчета с несколькими подключениями"""
@@ -191,9 +218,12 @@ class TestDatabase(unittest.TestCase):
         emp2 = self.db.add_employee("Многозадачный 2")
         
         # Первое подключение (один исполнитель)
+        self._add_materials([emp1, emp2])
         self.db.create_connection(
+            connection_type="mkd",
             address="Адрес 1",
             router_model="Router 1",
+            snr_box_model="-",
             port="1",
             fiber_meters=100.0,
             twisted_pair_meters=10.0,
@@ -204,8 +234,10 @@ class TestDatabase(unittest.TestCase):
         
         # Второе подключение (два исполнителя)
         self.db.create_connection(
+            connection_type="mkd",
             address="Адрес 2",
             router_model="Router 2",
+            snr_box_model="-",
             port="2",
             fiber_meters=200.0,
             twisted_pair_meters=20.0,
@@ -230,10 +262,13 @@ class TestDatabase(unittest.TestCase):
         self.assertEqual(count, 0)
         
         # Добавляем 3 подключения
+        self._add_materials([emp_id], fiber=1000.0, twisted=1000.0)
         for i in range(3):
             self.db.create_connection(
+                connection_type="mkd",
                 address=f"Адрес {i}",
                 router_model="Router",
+                snr_box_model="-",
                 port=str(i),
                 fiber_meters=100.0,
                 twisted_pair_meters=10.0,

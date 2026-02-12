@@ -31,28 +31,21 @@ cp .env.example .env
 python bot.py
 ```
 
-📖 **Подробная инструкция:** [docs/setup/SETUP_GUIDE.md](docs/setup/SETUP_GUIDE.md)
+📖 **Подробная инструкция:** [docs/QUICK_START.md](docs/QUICK_START.md)
 
 ## 📚 Документация
 
 ### Для начала работы
-- 🚀 [Руководство по установке](docs/setup/SETUP_GUIDE.md) - полная инструкция по настройке
-- 📺 [Настройка канала](docs/setup/CHANNEL_SETUP.md) - как подключить канал для отчётов
+- 🚀 [Быстрый старт](docs/QUICK_START.md)
+- 📚 [Обзор проекта](docs/PROJECT_OVERVIEW.md)
 
 ### Для разработчиков
-- 🏗️ [Архитектура проекта](docs/development/ARCHITECTURE.md) - структура кода
-- 📦 [Модули системы](docs/development/MODULES_README.md) - описание модулей
-- 📊 [Диаграмма модулей](docs/development/MODULE_DIAGRAM.txt) - визуальная схема
-- 💡 [Примеры использования](docs/development/EXAMPLES.md) - примеры кода
-- 🔄 [Процесс подключения](docs/development/NEW_CONNECTION_FLOW.txt) - детальный flow
-
-### История и изменения
-- 📝 [История изменений](docs/history/CHANGELOG.md) - все обновления
-- 🔄 [Заметки об обновлениях](docs/history/UPDATE_NOTES.md) - важные изменения
-- ♻️ [История рефакторинга](docs/history/REFACTORING_SUMMARY.md) - крупные изменения
-
-### Архив
-- 📁 [Архивные документы](docs/archive/) - устаревшие и временные документы
+- 🏗️ [Архитектура проекта](docs/ARCHITECTURE.md)
+- 📦 [Гид по модулям](docs/MODULE_GUIDE.md)
+- 🔍 [Анализ кодовой базы](docs/CODEBASE_ANALYSIS.md)
+- 🔄 [План рефакторинга](docs/REFACTORING_PLAN.md)
+- 🧭 [План мастера ТМЦ](docs/TMC_WIZARD_PLAN.md)
+- 📘 [Общий индекс документации](docs/README.md)
 
 ## 🛠️ Технологии
 
@@ -60,7 +53,6 @@ python bot.py
 - **python-telegram-bot 21.0** - Telegram Bot API
 - **SQLite3** - база данных
 - **openpyxl** - генерация Excel отчётов
-- **Pillow** - обработка изображений
 
 ## 📁 Структура проекта
 
@@ -68,21 +60,23 @@ python bot.py
 isp_telegram_bot/
 ├── bot.py                 # Главный файл бота
 ├── config.py              # Конфигурация и константы
-├── database.py            # Работа с БД
+├── database/              # Работа с БД (Repository Pattern)
+│   ├── db_manager.py
+│   └── repositories/
 ├── report_generator.py    # Генерация Excel отчётов
 ├── handlers/              # Обработчики команд
 │   ├── commands.py        # Основные команды (/start, /help)
-│   ├── connection.py      # Создание подключений
+│   ├── connection/        # Создание подключений
 │   ├── reports.py         # Генерация отчётов
-│   └── employees.py       # Управление сотрудниками
+│   └── employees/         # Управление сотрудниками
 ├── utils/                 # Вспомогательные функции
 │   ├── keyboards.py       # Клавиатуры Telegram
 │   └── helpers.py         # Вспомогательные функции
 ├── docs/                  # Документация
-│   ├── setup/            # Установка и настройка
-│   ├── development/      # Для разработчиков
-│   ├── history/          # История изменений
-│   └── archive/          # Архив
+│   ├── QUICK_START.md
+│   ├── ARCHITECTURE.md
+│   ├── MODULE_GUIDE.md
+│   └── ...
 └── requirements.txt       # Зависимости Python
 ```
 
@@ -163,8 +157,8 @@ docker-compose logs -f
 
 ## 🤝 Участие в разработке
 
-1. Изучите [архитектуру проекта](docs/development/ARCHITECTURE.md)
-2. Ознакомьтесь с [примерами кода](docs/development/EXAMPLES.md)
+1. Изучите [архитектуру проекта](docs/ARCHITECTURE.md)
+2. Ознакомьтесь с [гидом по модулям](docs/MODULE_GUIDE.md)
 3. Следуйте структуре модулей
 4. Тестируйте изменения перед коммитом
 
@@ -172,7 +166,7 @@ docker-compose logs -f
 
 При возникновении проблем:
 
-1. Проверьте [руководство по установке](docs/setup/SETUP_GUIDE.md)
+1. Проверьте [быстрый старт](docs/QUICK_START.md)
 2. Посмотрите логи: `tail -50 bot.log`
 3. Проверьте, что бот запущен: `ps aux | grep bot.py`
 

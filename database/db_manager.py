@@ -43,15 +43,65 @@ class Database:
     def create_tables(self):
         """Создать таблицы БД"""
         conn = self.get_connection()
+<<<<<<< Updated upstream
         cursor = conn.cursor()
         
         # Таблица сотрудников
+=======
+        try:
+            cursor = conn.cursor()
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS schema_migrations (
+                    version INTEGER PRIMARY KEY
+                )
+            """)
+            cursor.execute("SELECT COALESCE(MAX(version), 0) AS v FROM schema_migrations")
+            current_version = cursor.fetchone()[0] or 0
+            
+            migrations = [
+                self._migration_v1,
+                self._migration_v2,
+                self._migration_v3,
+                self._migration_v4,
+                self._migration_v5,
+                self._migration_v6,
+                self._migration_v7,
+                self._migration_v8,
+                self._migration_v9,
+                self._migration_v10,
+            ]
+            
+            if current_version >= len(migrations):
+                logger.info("Миграции не требуются, текущая версия схемы: %s", current_version)
+                return
+            
+            conn.execute("BEGIN")
+            for idx, migration in enumerate(migrations, start=1):
+                if idx > current_version:
+                    migration(cursor)
+                    cursor.execute("INSERT INTO schema_migrations (version) VALUES (?)", (idx,))
+                    logger.info("Применена миграция %s", idx)
+            conn.commit()
+            logger.info("Схема обновлена до версии %s", len(migrations))
+        except Exception as exc:
+            conn.rollback()
+            logger.error("Ошибка при применении миграций: %s", exc)
+            raise
+        finally:
+            conn.close()
+
+    def _migration_v1(self, cursor: sqlite3.Cursor) -> None:
+        """Базовая схема + все текущие поля"""
+        # Сотрудники
+>>>>>>> Stashed changes
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS employees (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 full_name TEXT NOT NULL UNIQUE,
                 fiber_balance REAL DEFAULT 0,
                 twisted_pair_balance REAL DEFAULT 0,
+                twisted_pair_external_balance REAL DEFAULT 0,
+                twisted_pair_internal_balance REAL DEFAULT 0,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
@@ -68,21 +118,54 @@ class Database:
             logger.info("Добавлено поле twisted_pair_balance в таблицу employees")
         except sqlite3.OperationalError:
             pass
+<<<<<<< Updated upstream
         
         # Таблица подключений
+=======
+        try:
+            cursor.execute("ALTER TABLE employees ADD COLUMN twisted_pair_external_balance REAL DEFAULT 0")
+        except sqlite3.OperationalError:
+            pass
+        try:
+            cursor.execute("ALTER TABLE employees ADD COLUMN twisted_pair_internal_balance REAL DEFAULT 0")
+        except sqlite3.OperationalError:
+            pass
+        # Подключения
+>>>>>>> Stashed changes
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS connections (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 connection_type TEXT NOT NULL DEFAULT 'mkd',
                 address TEXT NOT NULL,
                 router_model TEXT NOT NULL,
+<<<<<<< Updated upstream
                 port TEXT NOT NULL,
                 fiber_meters REAL NOT NULL,
                 twisted_pair_meters REAL NOT NULL,
+=======
+                snr_box_model TEXT NOT NULL DEFAULT '-',
+                snr_box_quantity INTEGER NOT NULL DEFAULT 0,
+                comment TEXT DEFAULT '',
+                bitrix_task_url TEXT NOT NULL DEFAULT '-',
+                account_number TEXT NOT NULL DEFAULT '',
+                port TEXT NOT NULL,
+                fiber_meters REAL NOT NULL,
+                twisted_pair_meters REAL NOT NULL,
+                twisted_pair_external_meters REAL NOT NULL DEFAULT 0,
+                twisted_pair_internal_meters REAL NOT NULL DEFAULT 0,
+                hooks_quantity REAL NOT NULL DEFAULT 0,
+                ork_quantity REAL NOT NULL DEFAULT 0,
+                mufta_quantity REAL NOT NULL DEFAULT 0,
+                onu_model TEXT NOT NULL DEFAULT '-',
+                onu_quantity INTEGER NOT NULL DEFAULT 0,
+                media_converter_model TEXT NOT NULL DEFAULT '-',
+                media_converter_quantity INTEGER NOT NULL DEFAULT 0,
+>>>>>>> Stashed changes
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 created_by INTEGER NOT NULL
             )
         """)
+<<<<<<< Updated upstream
         
         # Добавляем поле connection_type в существующую таблицу (если его нет)
         try:
@@ -125,6 +208,34 @@ class Database:
             pass
         
         # Таблица связи подключений и сотрудников (многие ко многим)
+=======
+        for stmt in (
+            "ALTER TABLE connections ADD COLUMN connection_type TEXT NOT NULL DEFAULT 'mkd'",
+            "ALTER TABLE connections ADD COLUMN snr_box_quantity INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE connections ADD COLUMN router_quantity INTEGER DEFAULT 1",
+            "ALTER TABLE connections ADD COLUMN snr_box_model TEXT NOT NULL DEFAULT '-'",
+            "ALTER TABLE connections ADD COLUMN comment TEXT DEFAULT ''",
+            "ALTER TABLE connections ADD COLUMN bitrix_task_url TEXT NOT NULL DEFAULT '-'",
+            "ALTER TABLE connections ADD COLUMN account_number TEXT NOT NULL DEFAULT ''",
+            "ALTER TABLE connections ADD COLUMN contract_signed INTEGER DEFAULT 0",
+            "ALTER TABLE connections ADD COLUMN router_access INTEGER DEFAULT 0",
+            "ALTER TABLE connections ADD COLUMN telegram_bot_connected INTEGER DEFAULT 0",
+            "ALTER TABLE connections ADD COLUMN twisted_pair_external_meters REAL NOT NULL DEFAULT 0",
+            "ALTER TABLE connections ADD COLUMN twisted_pair_internal_meters REAL NOT NULL DEFAULT 0",
+            "ALTER TABLE connections ADD COLUMN hooks_quantity REAL NOT NULL DEFAULT 0",
+            "ALTER TABLE connections ADD COLUMN ork_quantity REAL NOT NULL DEFAULT 0",
+            "ALTER TABLE connections ADD COLUMN mufta_quantity REAL NOT NULL DEFAULT 0",
+            "ALTER TABLE connections ADD COLUMN onu_model TEXT NOT NULL DEFAULT '-'",
+            "ALTER TABLE connections ADD COLUMN onu_quantity INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE connections ADD COLUMN media_converter_model TEXT NOT NULL DEFAULT '-'",
+            "ALTER TABLE connections ADD COLUMN media_converter_quantity INTEGER NOT NULL DEFAULT 0",
+        ):
+            try:
+                cursor.execute(stmt)
+            except sqlite3.OperationalError:
+                pass
+
+>>>>>>> Stashed changes
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS connection_employees (
                 connection_id INTEGER NOT NULL,
@@ -184,10 +295,164 @@ class Database:
                 FOREIGN KEY (connection_id) REFERENCES connections(id) ON DELETE SET NULL
             )
         """)
+<<<<<<< Updated upstream
         
         conn.commit()
         conn.close()
         logger.info("Таблицы БД созданы успешно")
+=======
+
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS bot_access (
+                user_id INTEGER PRIMARY KEY,
+                title TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                created_by INTEGER
+            )
+        """)
+
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS bot_admins (
+                user_id INTEGER PRIMARY KEY,
+                title TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                created_by INTEGER
+            )
+        """)
+
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_material_movement_employee_created
+            ON material_movement_log (employee_id, created_at)
+        """)
+
+    def _migration_v2(self, cursor: sqlite3.Cursor) -> None:
+        """Индекс для ускорения выборок по connection_id в логе материалов"""
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_material_movement_connection
+            ON material_movement_log (connection_id)
+        """)
+    
+    def _migration_v3(self, cursor: sqlite3.Cursor) -> None:
+        """Комментарий по подключению"""
+        try:
+            cursor.execute("ALTER TABLE connections ADD COLUMN comment TEXT DEFAULT ''")
+        except sqlite3.OperationalError:
+            pass
+
+    def _migration_v4(self, cursor: sqlite3.Cursor) -> None:
+        """Комментарий в логе движения материалов"""
+        try:
+            cursor.execute("ALTER TABLE material_movement_log ADD COLUMN comment TEXT DEFAULT ''")
+        except sqlite3.OperationalError:
+            pass
+
+    def _migration_v5(self, cursor: sqlite3.Cursor) -> None:
+        """Хранение выданного оборудования в connections"""
+        try:
+            cursor.execute("ALTER TABLE connections ADD COLUMN snr_box_quantity INTEGER NOT NULL DEFAULT 0")
+        except sqlite3.OperationalError:
+            pass
+        try:
+            cursor.execute("ALTER TABLE connections ADD COLUMN onu_model TEXT NOT NULL DEFAULT '-'")
+        except sqlite3.OperationalError:
+            pass
+        try:
+            cursor.execute("ALTER TABLE connections ADD COLUMN onu_quantity INTEGER NOT NULL DEFAULT 0")
+        except sqlite3.OperationalError:
+            pass
+        try:
+            cursor.execute("ALTER TABLE connections ADD COLUMN media_converter_model TEXT NOT NULL DEFAULT '-'")
+        except sqlite3.OperationalError:
+            pass
+        try:
+            cursor.execute("ALTER TABLE connections ADD COLUMN media_converter_quantity INTEGER NOT NULL DEFAULT 0")
+        except sqlite3.OperationalError:
+            pass
+
+    def _migration_v6(self, cursor: sqlite3.Cursor) -> None:
+        """Хранение SFP модулей сотрудников"""
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS employee_sfp_modules (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                employee_id INTEGER NOT NULL,
+                module_name TEXT NOT NULL,
+                quantity INTEGER NOT NULL DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
+            )
+            """
+        )
+
+    def _migration_v7(self, cursor: sqlite3.Cursor) -> None:
+        """Сохранение выданных SFP модулей в подключениях"""
+        try:
+            cursor.execute("ALTER TABLE connections ADD COLUMN sfp_module_model TEXT NOT NULL DEFAULT '-'")
+        except sqlite3.OperationalError:
+            pass
+        try:
+            cursor.execute("ALTER TABLE connections ADD COLUMN sfp_module_quantity INTEGER NOT NULL DEFAULT 0")
+        except sqlite3.OperationalError:
+            pass
+
+    def _migration_v8(self, cursor: sqlite3.Cursor) -> None:
+        """Добавление полей для учета магистральных линий."""
+        for stmt in (
+            "ALTER TABLE connections ADD COLUMN hooks_quantity REAL NOT NULL DEFAULT 0",
+            "ALTER TABLE connections ADD COLUMN ork_quantity REAL NOT NULL DEFAULT 0",
+            "ALTER TABLE connections ADD COLUMN mufta_quantity REAL NOT NULL DEFAULT 0",
+        ):
+            try:
+                cursor.execute(stmt)
+            except sqlite3.OperationalError:
+                pass
+
+    def _migration_v9(self, cursor: sqlite3.Cursor) -> None:
+        """Разделение витой пары на внешнюю и внутреннюю."""
+        for stmt in (
+            "ALTER TABLE employees ADD COLUMN twisted_pair_external_balance REAL DEFAULT 0",
+            "ALTER TABLE employees ADD COLUMN twisted_pair_internal_balance REAL DEFAULT 0",
+            "ALTER TABLE connections ADD COLUMN twisted_pair_external_meters REAL NOT NULL DEFAULT 0",
+            "ALTER TABLE connections ADD COLUMN twisted_pair_internal_meters REAL NOT NULL DEFAULT 0",
+        ):
+            try:
+                cursor.execute(stmt)
+            except sqlite3.OperationalError:
+                pass
+
+        # Исторические данные распределяем поровну, только если новые поля ещё пустые.
+        cursor.execute(
+            """
+            UPDATE employees
+            SET twisted_pair_external_balance = ROUND(COALESCE(twisted_pair_balance, 0) / 2.0, 2),
+                twisted_pair_internal_balance = COALESCE(twisted_pair_balance, 0) - ROUND(COALESCE(twisted_pair_balance, 0) / 2.0, 2)
+            WHERE COALESCE(twisted_pair_balance, 0) > 0
+              AND COALESCE(twisted_pair_external_balance, 0) = 0
+              AND COALESCE(twisted_pair_internal_balance, 0) = 0
+            """
+        )
+        cursor.execute(
+            """
+            UPDATE connections
+            SET twisted_pair_external_meters = ROUND(COALESCE(twisted_pair_meters, 0) / 2.0, 2),
+                twisted_pair_internal_meters = COALESCE(twisted_pair_meters, 0) - ROUND(COALESCE(twisted_pair_meters, 0) / 2.0, 2)
+            WHERE COALESCE(twisted_pair_meters, 0) > 0
+              AND COALESCE(twisted_pair_external_meters, 0) = 0
+              AND COALESCE(twisted_pair_internal_meters, 0) = 0
+            """
+        )
+
+    def _migration_v10(self, cursor: sqlite3.Cursor) -> None:
+        """Поля подключения: Bitrix24 и лицевой счет."""
+        for stmt in (
+            "ALTER TABLE connections ADD COLUMN bitrix_task_url TEXT NOT NULL DEFAULT '-'",
+            "ALTER TABLE connections ADD COLUMN account_number TEXT NOT NULL DEFAULT ''",
+        ):
+            try:
+                cursor.execute(stmt)
+            except sqlite3.OperationalError:
+                pass
+>>>>>>> Stashed changes
     
     # ==================== ЛОГИРОВАНИЕ ДВИЖЕНИЙ ====================
     
@@ -249,6 +514,7 @@ class Database:
     
     # ==================== МАТЕРИАЛЫ (делегирование MaterialRepository) ====================
     
+<<<<<<< Updated upstream
     def add_material_to_employee(self, employee_id: int, fiber_meters: float = 0, 
                                  twisted_pair_meters: float = 0, created_by: Optional[int] = None) -> bool:
         """Добавить материалы на баланс сотрудника"""
@@ -260,6 +526,51 @@ class Database:
                                       created_by: Optional[int] = None) -> bool:
         """Списать материалы с баланса сотрудника"""
         return self.materials_repo.deduct_material(employee_id, fiber_meters, twisted_pair_meters, connection_id, created_by)
+=======
+    def add_material_to_employee(
+        self,
+        employee_id: int,
+        fiber_meters: float = 0,
+        twisted_pair_meters: float = 0,
+        created_by: Optional[int] = None,
+        comment: str = "",
+        twisted_pair_external_meters: float = 0,
+        twisted_pair_internal_meters: float = 0,
+    ) -> bool:
+        """Добавить материалы на баланс сотрудника"""
+        return self.materials_repo.add_material(
+            employee_id=employee_id,
+            fiber_meters=fiber_meters,
+            twisted_pair_meters=twisted_pair_meters,
+            twisted_pair_external_meters=twisted_pair_external_meters,
+            twisted_pair_internal_meters=twisted_pair_internal_meters,
+            created_by=created_by,
+            comment=comment,
+        )
+    
+    def deduct_material_from_employee(
+        self,
+        employee_id: int,
+        fiber_meters: float = 0,
+        twisted_pair_meters: float = 0,
+        connection_id: Optional[int] = None,
+        created_by: Optional[int] = None,
+        comment: str = "",
+        twisted_pair_external_meters: float = 0,
+        twisted_pair_internal_meters: float = 0,
+    ) -> bool:
+        """Списать материалы с баланса сотрудника"""
+        return self.materials_repo.deduct_material(
+            employee_id=employee_id,
+            fiber_meters=fiber_meters,
+            twisted_pair_meters=twisted_pair_meters,
+            twisted_pair_external_meters=twisted_pair_external_meters,
+            twisted_pair_internal_meters=twisted_pair_internal_meters,
+            connection_id=connection_id,
+            created_by=created_by,
+            comment=comment,
+        )
+>>>>>>> Stashed changes
     
     def get_employee_balance(self, employee_id: int) -> Optional[Tuple[float, float]]:
         """Получить баланс материалов сотрудника (ВОЛС, Витая пара)"""
@@ -308,11 +619,42 @@ class Database:
         employee_ids: List[int],
         photo_file_ids: List[str],
         created_by: int,
+<<<<<<< Updated upstream
+=======
+        fiber_payer_id: Optional[int] = None,
+        twisted_payer_id: Optional[int] = None,
+        twisted_pair_external_meters: float = 0,
+        twisted_pair_internal_meters: float = 0,
+        twisted_external_payer_id: Optional[int] = None,
+        twisted_internal_payer_id: Optional[int] = None,
+        hooks_quantity: float = 0,
+        ork_quantity: float = 0,
+        mufta_quantity: float = 0,
+>>>>>>> Stashed changes
         material_payer_id: Optional[int] = None,
         router_quantity: int = 1,
         contract_signed: bool = False,
         router_access: bool = False,
+<<<<<<< Updated upstream
         telegram_bot_connected: bool = False
+=======
+        telegram_bot_connected: bool = False,
+        router_payer_id: Optional[int] = None,
+        snr_box_payer_id: Optional[int] = None,
+        snr_box_quantity: int = 0,
+        onu_model: str = '-',
+        onu_quantity: int = 0,
+        onu_payer_id: Optional[int] = None,
+        media_converter_model: str = '-',
+        media_converter_quantity: int = 0,
+        media_payer_id: Optional[int] = None,
+        sfp_module_model: str = '-',
+        sfp_module_quantity: int = 0,
+        sfp_payer_id: Optional[int] = None,
+        bitrix_task_url: str = "-",
+        account_number: str = "",
+        comment: str = "",
+>>>>>>> Stashed changes
     ) -> Optional[int]:
         """Создать новое подключение и списать материалы с указанного сотрудника
         
@@ -323,6 +665,7 @@ class Database:
         try:
             conn = self.get_connection()
             cursor = conn.cursor()
+<<<<<<< Updated upstream
             
             # Создаем запись подключения
             cursor.execute("""
@@ -331,6 +674,33 @@ class Database:
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (connection_type, address, router_model, port, fiber_meters, twisted_pair_meters, created_by, router_quantity, 1 if contract_signed else 0, 1 if router_access else 0, 1 if telegram_bot_connected else 0))
             
+=======
+
+            twisted_external = float(twisted_pair_external_meters or 0)
+            twisted_internal = float(twisted_pair_internal_meters or 0)
+            twisted_total = float(twisted_pair_meters or 0)
+            if twisted_external == 0 and twisted_internal == 0 and twisted_total != 0:
+                twisted_external = round(twisted_total / 2, 2)
+                twisted_internal = round(twisted_total - twisted_external, 2)
+            twisted_total = twisted_external + twisted_internal
+
+            cursor.execute("""
+                INSERT INTO connections 
+                (connection_type, address, router_model, snr_box_model, snr_box_quantity, comment, bitrix_task_url, account_number, port, fiber_meters, twisted_pair_meters, twisted_pair_external_meters, twisted_pair_internal_meters, hooks_quantity, ork_quantity, mufta_quantity, created_by, router_quantity, contract_signed, router_access, telegram_bot_connected, onu_model, onu_quantity, media_converter_model, media_converter_quantity, sfp_module_model, sfp_module_quantity)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                connection_type, address, router_model, snr_box_model, snr_box_quantity or 0, comment or "",
+                bitrix_task_url or "-", str(account_number or ""),
+                port, fiber_meters, twisted_total, twisted_external, twisted_internal,
+                hooks_quantity or 0, ork_quantity or 0, mufta_quantity or 0, created_by,
+                router_quantity, 1 if contract_signed else 0,
+                1 if router_access else 0, 1 if telegram_bot_connected else 0,
+                onu_model or "-", onu_quantity or 0,
+                media_converter_model or "-", media_converter_quantity or 0,
+                sfp_module_model or "-", sfp_module_quantity or 0,
+            ))
+
+>>>>>>> Stashed changes
             connection_id = cursor.lastrowid
             
             # Связываем всех сотрудников с подключением
@@ -339,6 +709,124 @@ class Database:
                     INSERT INTO connection_employees (connection_id, employee_id)
                     VALUES (?, ?)
                 """, (connection_id, emp_id))
+<<<<<<< Updated upstream
+=======
+
+            default_material_payer = material_payer_id or (employee_ids[0] if employee_ids else None)
+            if default_material_payer is None and (fiber_meters or twisted_total):
+                raise RuntimeError("Не указан исполнитель для списания материалов.")
+
+            fiber_owner = fiber_payer_id or default_material_payer
+            twisted_external_owner = twisted_external_payer_id or twisted_payer_id or fiber_owner
+            twisted_internal_owner = twisted_internal_payer_id or twisted_payer_id or twisted_external_owner
+
+            if fiber_meters > 0 and fiber_owner is None:
+                raise RuntimeError("Не выбран плательщик для списания ВОЛС.")
+            if twisted_external > 0 and twisted_external_owner is None:
+                raise RuntimeError("Не выбран плательщик для списания внешней витой пары.")
+            if twisted_internal > 0 and twisted_internal_owner is None:
+                raise RuntimeError("Не выбран плательщик для списания внутренней витой пары.")
+
+            deductions: Dict[int, Dict[str, float]] = {}
+
+            def _add_deduction(owner_id: Optional[int], key: str, value: float) -> None:
+                if not owner_id or value <= 0:
+                    return
+                slot = deductions.setdefault(
+                    owner_id,
+                    {"fiber": 0.0, "twisted_external": 0.0, "twisted_internal": 0.0},
+                )
+                slot[key] += value
+
+            _add_deduction(fiber_owner, "fiber", float(fiber_meters or 0))
+            _add_deduction(twisted_external_owner, "twisted_external", twisted_external)
+            _add_deduction(twisted_internal_owner, "twisted_internal", twisted_internal)
+
+            for owner_id, amounts in deductions.items():
+                if not self.materials_repo.deduct_material(
+                    employee_id=owner_id,
+                    fiber_meters=amounts["fiber"],
+                    twisted_pair_external_meters=amounts["twisted_external"],
+                    twisted_pair_internal_meters=amounts["twisted_internal"],
+                    connection_id=connection_id,
+                    created_by=created_by,
+                    connection=conn,
+                ):
+                    raise RuntimeError(
+                        f"Не удалось списать материалы с сотрудника ID {owner_id} "
+                        f"(ВОЛС={amounts['fiber']}, Внеш. ВП={amounts['twisted_external']}, "
+                        f"Внут. ВП={amounts['twisted_internal']})"
+                    )
+
+            # Списываем оборудование в рамках той же транзакции
+            if router_payer_id and router_model and router_model != '-' and router_quantity > 0:
+                if not self.routers_repo.deduct_router(
+                    router_payer_id,
+                    router_model,
+                    router_quantity,
+                    connection_id,
+                    created_by,
+                    connection=conn,
+                ):
+                    raise RuntimeError(
+                        f"Не удалось списать роутер '{router_model}' x{router_quantity} с сотрудника ID {router_payer_id}"
+                    )
+
+            if snr_box_payer_id and snr_box_model and snr_box_model != '-':
+                if not self.snr_repo.deduct_box(
+                    snr_box_payer_id,
+                    snr_box_model,
+                    snr_box_quantity or 0,
+                    connection_id,
+                    created_by,
+                    connection=conn,
+                ):
+                    raise RuntimeError(
+                        f"Не удалось списать SNR бокс '{snr_box_model}' x{snr_box_quantity or 0} с сотрудника ID {snr_box_payer_id}"
+                    )
+
+            if onu_model and onu_model != '-' and onu_quantity > 0 and employee_ids:
+                payer = onu_payer_id or employee_ids[0]
+                if not self.onu_repo.deduct_onu(
+                    payer,
+                    onu_model,
+                    onu_quantity,
+                    connection_id,
+                    created_by,
+                    connection=conn,
+                ):
+                    raise RuntimeError(
+                        f"Не удалось списать ONU '{onu_model}' x{onu_quantity} с сотрудника ID {payer}"
+                    )
+
+            if media_converter_model and media_converter_model != '-' and media_converter_quantity > 0 and employee_ids:
+                payer = media_payer_id or employee_ids[0]
+                if not self.media_repo.deduct_converter(
+                    payer,
+                    media_converter_model,
+                    media_converter_quantity,
+                    connection_id,
+                    created_by,
+                    connection=conn,
+                ):
+                    raise RuntimeError(
+                        f"Не удалось списать медиаконвертор '{media_converter_model}' x{media_converter_quantity} с сотрудника ID {payer}"
+                    )
+
+            if sfp_module_model and sfp_module_model != '-' and sfp_module_quantity > 0 and employee_ids:
+                payer = sfp_payer_id or employee_ids[0]
+                if not self.sfp_repo.deduct_module(
+                    payer,
+                    sfp_module_model,
+                    sfp_module_quantity,
+                    connection_id,
+                    created_by,
+                    connection=conn,
+                ):
+                    raise RuntimeError(
+                        f"Не удалось списать SFP модуль '{sfp_module_model}' x{sfp_module_quantity} с сотрудника ID {payer}"
+                    )
+>>>>>>> Stashed changes
             
             # Списываем материалы
             if material_payer_id:

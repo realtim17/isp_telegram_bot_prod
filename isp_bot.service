@@ -6,8 +6,8 @@ After=network.target
 Type=simple
 User=your_username
 WorkingDirectory=/path/to/isp_telegram_bot
-Environment="PATH=/path/to/isp_telegram_bot/venv/bin"
-ExecStart=/path/to/isp_telegram_bot/venv/bin/python bot.py
+Environment="PATH=/path/to/isp_telegram_bot/.venv311/bin"
+ExecStart=/path/to/isp_telegram_bot/.venv311/bin/python bot.py
 
 # Перезапуск при падении
 Restart=always

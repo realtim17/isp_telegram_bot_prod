@@ -7,6 +7,9 @@ echo "🚀 Запуск бота..."
 # Переход в директорию со скриптом
 cd "$(dirname "$0")"
 
+VENV_DIR=".venv311"
+PYTHON_BIN="python3.11"
+
 # Проверка наличия .env файла
 if [ ! -f .env ]; then
     echo "❌ Ошибка: файл .env не найден"
@@ -14,11 +17,27 @@ if [ ! -f .env ]; then
     exit 1
 fi
 
+# Проверка версии существующего окружения
+if [ -x "$VENV_DIR/bin/python" ]; then
+    if ! "$VENV_DIR/bin/python" -c 'import sys; raise SystemExit(0 if sys.version_info[:2] == (3, 11) else 1)'; then
+        echo "❌ $VENV_DIR создан не на Python 3.11"
+        echo "   Удалите $VENV_DIR и запустите скрипт снова"
+        exit 1
+    fi
+fi
+
 # Проверка наличия виртуального окружения
-if [ ! -d "venv" ]; then
+if [ ! -d "$VENV_DIR" ]; then
     echo "⚠️  Виртуальное окружение не найдено"
     echo "📦 Создание виртуального окружения..."
-    python3 -m venv venv
+
+    if ! command -v "$PYTHON_BIN" >/dev/null 2>&1; then
+        echo "❌ Не найден $PYTHON_BIN"
+        echo "   Установите Python 3.11 и повторите запуск"
+        exit 1
+    fi
+
+    "$PYTHON_BIN" -m venv "$VENV_DIR"
     
     if [ $? -ne 0 ]; then
         echo "❌ Ошибка при создании виртуального окружения"
@@ -28,7 +47,7 @@ fi
 
 # Активация виртуального окружения
 echo "🔧 Активация виртуального окружения..."
-source venv/bin/activate
+source "$VENV_DIR/bin/activate"
 
 # Проверка и установка зависимостей
 echo "📦 Проверка зависимостей..."

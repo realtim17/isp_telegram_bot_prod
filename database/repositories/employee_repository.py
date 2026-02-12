@@ -27,7 +27,9 @@ class EmployeeRepository(BaseRepository):
     def get_all(self) -> List[Dict]:
         """Получить список всех сотрудников"""
         return self.execute_query("""
-            SELECT id, full_name, fiber_balance, twisted_pair_balance, created_at 
+            SELECT id, full_name, fiber_balance, twisted_pair_balance,
+                   twisted_pair_external_balance, twisted_pair_internal_balance,
+                   created_at
             FROM employees 
             ORDER BY full_name
         """, fetch_all=True) or []
@@ -35,7 +37,9 @@ class EmployeeRepository(BaseRepository):
     def get_by_id(self, employee_id: int) -> Optional[Dict]:
         """Получить сотрудника по ID"""
         return self.execute_query("""
-            SELECT id, full_name, fiber_balance, twisted_pair_balance, created_at 
+            SELECT id, full_name, fiber_balance, twisted_pair_balance,
+                   twisted_pair_external_balance, twisted_pair_internal_balance,
+                   created_at
             FROM employees 
             WHERE id = ?
         """, (employee_id,), fetch_one=True)
@@ -53,7 +57,10 @@ class EmployeeRepository(BaseRepository):
             # Обнуляем балансы материалов (или можно оставить для истории)
             cursor.execute("""
                 UPDATE employees 
-                SET fiber_balance = 0, twisted_pair_balance = 0 
+                SET fiber_balance = 0,
+                    twisted_pair_balance = 0,
+                    twisted_pair_external_balance = 0,
+                    twisted_pair_internal_balance = 0
                 WHERE id = ?
             """, (employee_id,))
             
@@ -76,16 +83,20 @@ class EmployeeRepository(BaseRepository):
         """Получить баланс материалов сотрудника (ВОЛС, Витая пара)"""
         try:
             result = self.execute_query("""
-                SELECT fiber_balance, twisted_pair_balance 
+                SELECT fiber_balance, twisted_pair_balance,
+                       twisted_pair_external_balance, twisted_pair_internal_balance
                 FROM employees 
                 WHERE id = ?
             """, (employee_id,), fetch_one=True)
             
             if result:
-                return (result.get('fiber_balance', 0) or 0, 
-                       result.get('twisted_pair_balance', 0) or 0)
+                twisted_external = result.get('twisted_pair_external_balance', 0) or 0
+                twisted_internal = result.get('twisted_pair_internal_balance', 0) or 0
+                twisted_total = result.get('twisted_pair_balance', 0) or 0
+                if twisted_external or twisted_internal:
+                    twisted_total = twisted_external + twisted_internal
+                return (result.get('fiber_balance', 0) or 0, twisted_total)
             return None
         except Exception as e:
             logger.error(f"Ошибка при получении баланса: {e}")
             return None
-
